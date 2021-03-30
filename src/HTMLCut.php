@@ -30,8 +30,8 @@ class HTMLCut
             if (mb_strlen(strip_tags($string), 'UTF-8') > $length) {
                 #Convert to HTML DOM object
                 $html = new \DOMDocument();
-                #LIBXML_HTML_NOIMPLIED and LIBXML_HTML_NODEFDTD to avoid adding wrappers (html, body, DTD). This will also allow less issues in case string has both regular HTML and some regular text (outside of any tags). LIBXML_NOBLANKS to remove empty tags if any. LIBXML_PARSEHUGE to allow processing of larger strings.
-                $html->loadHTML($string, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD | LIBXML_NOBLANKS | LIBXML_PARSEHUGE);
+                #LIBXML_HTML_NOIMPLIED and LIBXML_HTML_NODEFDTD to avoid adding wrappers (html, body, DTD). This will also allow less issues in case string has both regular HTML and some regular text (outside of any tags). LIBXML_NOBLANKS to remove empty tags if any. LIBXML_PARSEHUGE to allow processing of larger strings. LIBXML_COMPACT for some potential optimization. LIBXML_NOWARNING and LIBXML_NOERROR to supress warning in case of malformed HTML
+                $html->loadHTML($string, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD | LIBXML_NOBLANKS | LIBXML_PARSEHUGE | LIBXML_COMPACT | LIBXML_NOWARNING | LIBXML_NOERROR);
                 $html->preserveWhiteSpace = false;
                 $html->formatOutput = false;
                 $html->normalizeDocument();
@@ -40,90 +40,92 @@ class HTMLCut
             #We already have a DOMNode
             $html = $string;
         }
-        #Check of node has children
-        if (count($html->childNodes) > 0) {
-            #Set new length
-            $newLength = 0;
-            #Iterrate children. While theoretically we can use the getElementsByTagName (as is also done further down the code), I was not able to get consistent results with it on this step, often not getting any text whatsoever.
-            foreach ($html->childNodes as $key=>$node) {
-                #Get length of current node
-                $nodeLength = mb_strlen(strip_tags($node->nodeValue), 'UTF-8');
-                #Check if it fits
-                if ($newLength + $nodeLength <= $length) {
-                    #Increase current length
-                    $newLength += $nodeLength;
-                    #Go to next node
-                    continue;
-                } else {
-                    #Need to cut the value
-                    #Check if DOMText
-                    if ($node instanceof \DOMText) {
-                        #Cut directly in the DOM. Regex allows to retain whole words.
-                        $html->childNodes->item($key)->nodeValue = preg_replace('/^(.{'.(($length - $newLength) > 0 ? '1,'.($length - $newLength) : '0,0').'}\b)(.*)/siu', '$1', $html->childNodes->item($key)->nodeValue);
-                    } else {
-                        #Recurse and replace current node with new (possibly cut) node
-                        $html->replaceChild($this->Cut($node, $length - $newLength), $node);
-                    }
-                    #Get length of updated node
-                    $nodeLength = mb_strlen(strip_tags($html->childNodes->item($key)->nodeValue), 'UTF-8');
+        if (isset($html)) {
+            #Check of node has children
+            if (count($html->childNodes) > 0) {
+                #Set new length
+                $newLength = 0;
+                #Iterrate children. While theoretically we can use the getElementsByTagName (as is also done further down the code), I was not able to get consistent results with it on this step, often not getting any text whatsoever.
+                foreach ($html->childNodes as $key=>$node) {
+                    #Get length of current node
+                    $nodeLength = mb_strlen(strip_tags($node->nodeValue), 'UTF-8');
+                    #Check if it fits
                     if ($newLength + $nodeLength <= $length) {
-                        #Update current length
+                        #Increase current length
                         $newLength += $nodeLength;
+                        #Go to next node
+                        continue;
                     } else {
-                        #Remove child, since its excessive
-                        $node->parentNode->removeChild($node);
-                    }
-                }
-            }
-        } else {
-            #Check if what we have is already a \DOMText
-            if ($html instanceof \DOMText) {
-                #Cut directly in the DOM. Regex allows to retain whole words.
-                $html->nodeValue = preg_replace('/^(.{'.(($length - $newLength) > 0 ? '1,'.($length - $newLength) : '0,0').'}\b)(.*)/siu', '$1', $html->nodeValue);
-            }
-        }
-        if ($html instanceof \DOMDocument) {
-            #Set xpath variable
-            $xpath = new \DOMXPath($html);
-            #Remove all tags, that do not make sense or have potential to harm in a preview
-            if ($stripUnwated) {
-                foreach ($xpath->query(implode('|', array_map(function($val) { return '//'.$val;} , $this->extraTags))) as $node) {
-                    $node->parentNode->removeChild($node);
-                }
-            }
-            #Reduce number of paragraphs shown
-            if ($paragraphs > 0) {
-                #Get current number of paragraphs. Also counting other elements, that generally look as separate paragraphs.
-                $curPar = $xpath->query(implode('|', array_map(function($val) { return '//'.$val;} , $this->paraTags)))->length;
-                #Check if number of current paragraphs is larger than allowed. Do not do processing, if it's not.
-                if ($curPar > $paragraphs) {
-                    #Get all tags
-                    $tags = $html->getElementsByTagName('*');
-                    #Iterrate backwards (as per https://www.php.net/manual/en/class.domnodelist.php#83390). Regular iterration seems to provide strange results.
-                    for ($i = $tags->length; --$i >= 0;) {
-                        #Check if number of current paragraphs is larger than allowed
-                        if ($curPar > $paragraphs) {
-                            if (in_array(strtolower($node->nodeName), $this->paraTags)) {
-                                $curPar--;
-                            }
-                            #Get actual node
-                            $node = $tags->item($i);
-                            #Remove node
+                        #Need to cut the value
+                        #Check if DOMText
+                        if ($node instanceof \DOMText) {
+                            #Cut directly in the DOM. Regex allows to retain whole words.
+                            $html->childNodes->item($key)->nodeValue = preg_replace('/^(.{'.(($length - $newLength) > 0 ? '1,'.($length - $newLength) : '0,0').'}\b)(.*)/siu', '$1', $html->childNodes->item($key)->nodeValue);
+                        } else {
+                            #Recurse and replace current node with new (possibly cut) node
+                            $html->replaceChild($this->Cut($node, $length - $newLength), $node);
+                        }
+                        #Get length of updated node
+                        $nodeLength = mb_strlen(strip_tags($html->childNodes->item($key)->nodeValue), 'UTF-8');
+                        if ($newLength + $nodeLength <= $length) {
+                            #Update current length
+                            $newLength += $nodeLength;
+                        } else {
+                            #Remove child, since its excessive
                             $node->parentNode->removeChild($node);
                         }
                     }
                 }
-            }
-            #Remove all empty nodes (taken from https://stackoverflow.com/questions/40367047/remove-all-empty-html-elements-using-php-domdocument). Using `while` allows for recursion
-            while (($node_list = $xpath->query('//*[not(*) and not(@*) and not(text()[normalize-space()])]')) && $node_list->length) {
-                foreach ($node_list as $node) {
-                    $node->parentNode->removeChild($node);
+            } else {
+                #Check if what we have is already a \DOMText
+                if ($html instanceof \DOMText) {
+                    #Cut directly in the DOM. Regex allows to retain whole words.
+                    $html->nodeValue = preg_replace('/^(.{'.(($length - $newLength) > 0 ? '1,'.($length - $newLength) : '0,0').'}\b)(.*)/siu', '$1', $html->nodeValue);
                 }
             }
-            #Update string
-            $newString = $html->saveHTML();
-        } else {
-            return $html;
+            if ($html instanceof \DOMDocument) {
+                #Set xpath variable
+                $xpath = new \DOMXPath($html);
+                #Remove all tags, that do not make sense or have potential to harm in a preview
+                if ($stripUnwated) {
+                    foreach ($xpath->query(implode('|', array_map(function($val) { return '//'.$val;} , $this->extraTags))) as $node) {
+                        $node->parentNode->removeChild($node);
+                    }
+                }
+                #Reduce number of paragraphs shown
+                if ($paragraphs > 0) {
+                    #Get current number of paragraphs. Also counting other elements, that generally look as separate paragraphs.
+                    $curPar = $xpath->query(implode('|', array_map(function($val) { return '//'.$val;} , $this->paraTags)))->length;
+                    #Check if number of current paragraphs is larger than allowed. Do not do processing, if it's not.
+                    if ($curPar > $paragraphs) {
+                        #Get all tags
+                        $tags = $html->getElementsByTagName('*');
+                        #Iterrate backwards (as per https://www.php.net/manual/en/class.domnodelist.php#83390). Regular iterration seems to provide strange results.
+                        for ($i = $tags->length; --$i >= 0;) {
+                            #Check if number of current paragraphs is larger than allowed
+                            if ($curPar > $paragraphs) {
+                                if (in_array(strtolower($node->nodeName), $this->paraTags)) {
+                                    $curPar--;
+                                }
+                                #Get actual node
+                                $node = $tags->item($i);
+                                #Remove node
+                                $node->parentNode->removeChild($node);
+                            }
+                        }
+                    }
+                }
+                #Remove all empty nodes (taken from https://stackoverflow.com/questions/40367047/remove-all-empty-html-elements-using-php-domdocument). Using `while` allows for recursion
+                while (($node_list = $xpath->query('//*[not(*) and not(@*) and not(text()[normalize-space()])]')) && $node_list->length) {
+                    foreach ($node_list as $node) {
+                        $node->parentNode->removeChild($node);
+                    }
+                }
+                #Update string
+                $newString = $html->saveHTML();
+            } else {
+                return $html;
+            }
         }
         #Check if string got updated
         if (isset($newString)) {
