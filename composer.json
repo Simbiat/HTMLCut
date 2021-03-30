@@ -1,0 +1,28 @@
+{
+    "name": "simbiat/htmlcut",
+    "type": "library",
+    "keywords": ["cut","php","html"],
+    "description": "Class to cut HTML text into something suitable for preview.",
+    "homepage": "https://github.com/Simbiat/htmlcut",
+    "license": "AGPL-3.0-or-later",
+    "authors": [
+        {
+            "name": "Dmitry Kustov",
+            "email": "simbiat@outlook.com",
+            "homepage": "https://simbiat.ru",
+            "role": "Developer"
+        }
+    ],
+    "require": {
+        "php": "^8"
+    },
+    "autoload": {
+        "psr-4": {
+            "Simbiat\\": "src/"
+        }
+    },
+	"support": {
+		"issues": "https://github.com/Simbiat/htmlcut/issues",
+		"source": "https://github.com/Simbiat/htmlcut"
+	}
+}
