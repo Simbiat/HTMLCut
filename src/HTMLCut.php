@@ -147,9 +147,9 @@ class HTMLCut
             #Remove some common punctuation from the end of the string (if any). These elements, when found ad the end of string, may look out of place. Also remove any excessive <br> at the beginning and end of the string.
             $string = preg_replace('/(^(\<br\>)+)|((\<br\>)+$)/i', '', preg_replace($this->punctuation, '', $newString));
             #Return with ellipsis
-            return $string.$ellipsis;
+            return nl2br($string.$ellipsis);
         } else {
-            return $string;
+            return nl2br($string);
         }
     }
 }
