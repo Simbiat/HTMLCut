@@ -29,9 +29,9 @@ class HTMLCut
             #Check if string is too long without HTML tags
             if (mb_strlen(strip_tags($string), 'UTF-8') > $length) {
                 #Convert to HTML DOM object
-                $html = new \DOMDocument();
-                #LIBXML_HTML_NOIMPLIED and LIBXML_HTML_NODEFDTD to avoid adding wrappers (html, body, DTD). This will also allow less issues in case string has both regular HTML and some regular text (outside of any tags). LIBXML_NOBLANKS to remove empty tags if any. LIBXML_PARSEHUGE to allow processing of larger strings. LIBXML_COMPACT for some potential optimization. LIBXML_NOWARNING and LIBXML_NOERROR to supress warning in case of malformed HTML
-                $html->loadHTML($string, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD | LIBXML_NOBLANKS | LIBXML_PARSEHUGE | LIBXML_COMPACT | LIBXML_NOWARNING | LIBXML_NOERROR);
+                $html = new \DOMDocument(encoding: 'UTF-8');
+                #LIBXML_HTML_NOIMPLIED and LIBXML_HTML_NODEFDTD to avoid adding wrappers (html, body, DTD). This will also allow less issues in case string has both regular HTML and some regular text (outside of any tags). LIBXML_NOBLANKS to remove empty tags if any. LIBXML_PARSEHUGE to allow processing of larger strings. LIBXML_COMPACT for some potential optimization. LIBXML_NOWARNING and LIBXML_NOERROR to supress warning in case of malformed HTML. LIBXML_NONET to protect from unsolicited connections to external sources.
+                $html->loadHTML('<?xml version="1.0" encoding="UTF-8"?>'.$string, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD | LIBXML_NOBLANKS | LIBXML_PARSEHUGE | LIBXML_COMPACT | LIBXML_NOWARNING | LIBXML_NOERROR | LIBXML_NONET);
                 $html->preserveWhiteSpace = false;
                 $html->formatOutput = false;
                 $html->normalizeDocument();
@@ -134,9 +134,9 @@ class HTMLCut
         #Reduce number of paragraphs shown. While this has been done in terms of pure HTML, there is a chance, that we have regular text with regular newlines.
         if ($paragraphs > 0) {
             #Remove any whitespace between HTML tags, newlines before/after tags and also trim (as precaution)
-            $string = trim(preg_replace('/(>|<)(\r+\n+|\r+|\n+)/i', '$1', preg_replace('/(\r+\n+|\r+|\n+)(>|<)/i', '$2', preg_replace('/>\s+</m', '><', $string))));
+            $string = trim(preg_replace('/(>|<)(\r+\n+|\r+|\n+)/iu', '$1', preg_replace('/(\r+\n+|\r+|\n+)(>|<)/iu', '$2', preg_replace('/>\s+</mu', '><', $string))));
             #Explode by newlines  (treat multiple newlines as one)
-            $curPar = preg_split('/\r+\n+|\r+|\n+/', $string);
+            $curPar = preg_split('/\r+\n+|\r+|\n+/u', $string);
             if (count($curPar) > $paragraphs) {
                 #Slice and then implode back
                 $newString = implode('<br>', array_slice($curPar, 0, $paragraphs));
@@ -145,7 +145,7 @@ class HTMLCut
         #Return
         if (isset($newString)) {
             #Remove some common punctuation from the end of the string (if any). These elements, when found ad the end of string, may look out of place. Also remove any excessive <br> at the beginning and end of the string.
-            $string = preg_replace('/(^(\<br\>)+)|((\<br\>)+$)/i', '', preg_replace($this->punctuation, '', $newString));
+            $string = preg_replace('/(^(\<br\>)+)|((\<br\>)+$)/iu', '', preg_replace($this->punctuation, '', $newString));
             #Return with ellipsis
             return nl2br($string.$ellipsis);
         } else {
