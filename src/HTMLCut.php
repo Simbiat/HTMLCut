@@ -6,14 +6,14 @@ class HTMLCut
 {
     #Tags, that we consider irrelevant or harmful for preview
     public array $extraTags = [
-        'applet', 'area', 'audio', 'base', 'blockquote', 'body', 'button', 'canvas', 'code', 'col', 'data', 'datalist', 'details', 'dialog', 'dir', 'embed', 'fieldset', 'figcapture', 'figure', 'font', 'footer', 'form', 'frame', 'frameset', 'header', 'html', 'iframe', 'img', 'input', 'ins', 'kbd', 'legend', 'link', 'main', 'map', 'meta', 'nav', 'noframes', 'noscript', 'object', 'optgroup', 'option', 'output', 'picture', 'pre', 'progress', 'q', 'rp', 'rt', 'ruby', 'samp', 'script', 'select', 'source', 'style', 'summary', 'svg', 'table', 'tbody', 'td', 'template', 'textarea', 'tfoot', 'th', 'thead', 'title', 'tr', 'track', 'tt', 'var', 'video',
+        'applet', 'area', 'audio', 'base', 'blockquote', 'button', 'canvas', 'code', 'col', 'data', 'datalist', 'details', 'dialog', 'dir', 'embed', 'fieldset', 'figcapture', 'figure', 'font', 'footer', 'form', 'frame', 'frameset', 'header', 'iframe', 'img', 'input', 'ins', 'kbd', 'legend', 'link', 'main', 'map', 'meta', 'nav', 'noframes', 'noscript', 'object', 'optgroup', 'option', 'output', 'picture', 'pre', 'progress', 'q', 'rp', 'rt', 'ruby', 'samp', 'script', 'select', 'source', 'style', 'summary', 'svg', 'table', 'tbody', 'td', 'template', 'textarea', 'tfoot', 'th', 'thead', 'title', 'tr', 'track', 'tt', 'var', 'video',
     ];
     #Tags that we consider paragraphs
     public array $paraTags = [
         'article', 'aside', 'div', 'li', 'p', 'section',
     ];
     #Regex to remove punctuation symbols from the end of the string, that may make no sense there
-    private string $punctuation = '/([:;,\[\(\-\{\<_„“‘«「﹁‹『﹃《〈]{1,}|\.{2,})$/ui';
+    private string $punctuation = '/([:;,\[(\-{<_„“‘«「﹁‹『﹃《〈]+|\.{2,})$/ui';
 
     public function Cut(\DOMNode|string $string, int $length, int $paragraphs = 0, string $ellipsis = '…', bool $stripUnwanted = true): \DOMNode|string
     {
@@ -27,11 +27,12 @@ class HTMLCut
         }
         if (is_string($string)) {
             #Check if string is too long without HTML tags
-            if (mb_strlen(strip_tags($string), 'UTF-8') > $length) {
+            $initialLength = mb_strlen(strip_tags($string), 'UTF-8');
+            if ($initialLength > $length) {
                 #Convert to HTML DOM object
                 $html = new \DOMDocument(encoding: 'UTF-8');
                 #mb_convert_encoding is done as per workaround for UTF-8 loss/corruption on load from https://stackoverflow.com/questions/8218230/php-domdocument-loadhtml-not-encoding-utf-8-correctly
-                #LIBXML_HTML_NOIMPLIED and LIBXML_HTML_NOTED to avoid adding wrappers (html, body, DTD). This will also allow less issues in case string has both regular HTML and some regular text (outside of any tags). LIBXML_NOBLANKS to remove empty tags if any. LIBXML_PARSEHUGE to allow processing of larger strings. LIBXML_COMPACT for some potential optimization. LIBXML_NOWARNING and LIBXML_NOERROR to suppress warning in case of malformed HTML. LIBXML_NONET to protect from unsolicited connections to external sources.
+                #LIBXML_HTML_NOIMPLIED and LIBXML_HTML_NOTED to avoid adding wrappers (html, body, DTD). This will also allow fewer issues in case string has both regular HTML and some regular text (outside any tags). LIBXML_NOBLANKS to remove empty tags if any. LIBXML_PARSEHUGE to allow processing of larger strings. LIBXML_COMPACT for some potential optimization. LIBXML_NOWARNING and LIBXML_NOERROR to suppress warning in case of malformed HTML. LIBXML_NONET to protect from unsolicited connections to external sources.
                 $html->loadHTML(mb_convert_encoding($string, 'HTML-ENTITIES', 'UTF-8'), LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD | LIBXML_NOBLANKS | LIBXML_PARSEHUGE | LIBXML_COMPACT | LIBXML_NOWARNING | LIBXML_NOERROR | LIBXML_NONET);
                 $html->preserveWhiteSpace = false;
                 $html->formatOutput = false;
@@ -39,6 +40,7 @@ class HTMLCut
             }
         } else {
             #We already have a DOMNode
+            $initialLength = mb_strlen(strip_tags($string->nodeValue ?? $string->textContent), 'UTF-8');
             $html = $string;
         }
         if (isset($html)) {
@@ -49,7 +51,7 @@ class HTMLCut
                 #Iterrate children. While theoretically we can use the getElementsByTagName (as is also done further down the code), I was not able to get consistent results with it on this step, often not getting any text whatsoever.
                 foreach ($html->childNodes as $key=>$node) {
                     #Get length of current node
-                    $nodeLength = mb_strlen(strip_tags($node->nodeValue), 'UTF-8');
+                    $nodeLength = mb_strlen(strip_tags($node->nodeValue ?? $node->textContent), 'UTF-8');
                     #Check if it fits
                     if ($newLength + $nodeLength <= $length) {
                         #Increase current length
@@ -79,8 +81,8 @@ class HTMLCut
             } else {
                 #Check if what we have is already a \DOMText
                 if ($html instanceof \DOMText) {
-                    #Cut directly in the DOM. Regex allows to retain whole words.
-                    $html->nodeValue = preg_replace('/^(.{'.(($length - $newLength) > 0 ? '1,'.($length - $newLength) : '0,0').'}\b)(.*)/siu', '$1', $html->nodeValue);
+                    #Cut directly in the DOM. Regex allows to retain whole words. We also trim the text inside the nodes
+                    $html->nodeValue = preg_replace('/>\s+/ui', '>', preg_replace('/\s+</ui', '<', preg_replace('/^(.{'.(($length - $newLength) > 0 ? '1,'.($length - $newLength) : '0,0').'}\b)(.*)/siu', '$1', $html->nodeValue)));
                 }
             }
             if ($html instanceof \DOMDocument) {
@@ -121,8 +123,8 @@ class HTMLCut
                         $node->parentNode->removeChild($node);
                     }
                 }
-                #Update string
-                $newString = $html->saveHTML();
+                #Update string by saving object as HTML string, but strip some standard tags added by PHP
+                $newString = preg_replace('/>\s+/ui', '>', preg_replace('/\s+</ui', '<', preg_replace('/(<!DOCTYPE html PUBLIC "-\/\/W3C\/\/DTD HTML 4\.0 Transitional\/\/EN" "http:\/\/www\.w3\.org\/TR\/REC-html40\/loose\.dtd">\s*<html>\s*<body>\s*)(.*)(<\/body><\/html>)/uis', '$2', $html->saveHTML())));
             } else {
                 return $html;
             }
@@ -147,9 +149,9 @@ class HTMLCut
             #Remove some common punctuation from the end of the string (if any). These elements, when found ad the end of string, may look out of place. Also remove any excessive <br> at the beginning and end of the string.
             $string = preg_replace('/(^(<br>)+)|((<br>)+$)/iu', '', preg_replace($this->punctuation, '', $newString));
             #Return with ellipsis
-            return nl2br($string.$ellipsis);
+            return nl2br(trim($string)).($initialLength > $length ? $ellipsis : '');
         } else {
-            return nl2br($string);
+            return nl2br(trim($string));
         }
     }
 }
