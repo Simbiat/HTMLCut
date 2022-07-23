@@ -26,6 +26,8 @@ class HTMLCut
             $paragraphs = 0;
         }
         if (is_string($string)) {
+            #Remove HTML comments, CDATA and DOCTYPE
+            $string = preg_replace('/\s*<!DOCTYPE[^>[]*(\[[^]]*])?>\s*/muis', '', preg_replace('/\s*<!\[CDATA\[.*?]]>\s*/muis', '', preg_replace('/\s*<!--.*?-->\s*/muis', '', $string)));
             #Check if string is too long without HTML tags
             $initialLength = mb_strlen(strip_tags($string), 'UTF-8');
             if ($initialLength > $length) {
@@ -50,6 +52,11 @@ class HTMLCut
             if (count($html->childNodes) > 0) {
                 #Iterrate children. While theoretically we can use the getElementsByTagName (as is also done further down the code), I was not able to get consistent results with it on this step, often not getting any text whatsoever.
                 foreach ($html->childNodes as $key=>$node) {
+                    #Remove HTML comments, CDATA and DOCTYPE
+                    if ($node instanceof \DOMComment || $node instanceof \DOMCdataSection || $node instanceof \DOMNotation) {
+                        $html->removeChild($node);
+                        continue;
+                    }
                     #Get length of current node
                     $nodeLength = mb_strlen(strip_tags($node->nodeValue ?? $node->textContent), 'UTF-8');
                     #Check if it fits
