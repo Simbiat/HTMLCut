@@ -5,17 +5,17 @@ namespace Simbiat;
 class HTMLCut
 {
     #Tags, that we consider irrelevant or harmful for preview
-    public array $extraTags = [
+    public static array $extraTags = [
         'applet', 'area', 'audio', 'base', 'blockquote', 'button', 'canvas', 'code', 'col', 'data', 'datalist', 'details', 'dialog', 'dir', 'embed', 'fieldset', 'figcapture', 'figure', 'font', 'footer', 'form', 'frame', 'frameset', 'header', 'iframe', 'img', 'input', 'ins', 'kbd', 'legend', 'link', 'main', 'map', 'meta', 'nav', 'noframes', 'noscript', 'object', 'optgroup', 'option', 'output', 'picture', 'pre', 'progress', 'q', 'rp', 'rt', 'ruby', 'samp', 'script', 'select', 'source', 'style', 'summary', 'svg', 'table', 'tbody', 'td', 'template', 'textarea', 'tfoot', 'th', 'thead', 'title', 'tr', 'track', 'tt', 'var', 'video',
     ];
     #Tags that we consider paragraphs
-    public array $paraTags = [
+    public static array $paraTags = [
         'article', 'aside', 'div', 'li', 'p', 'section',
     ];
     #Regex to remove punctuation symbols from the end of the string, that may make no sense there
-    private string $punctuation = '/([:;,\[(\-{<_„“‘«「﹁‹『﹃《〈]+|\.{2,})$/ui';
+    private static string $punctuation = '/([:;,\[(\-{<_„“‘«「﹁‹『﹃《〈]+|\.{2,})$/ui';
 
-    public function Cut(\DOMNode|string $string, int $length, int $paragraphs = 0, string $ellipsis = '…', bool $stripUnwanted = true): \DOMNode|string
+    public static function Cut(\DOMNode|string $string, int $length, int $paragraphs = 0, string $ellipsis = '…', bool $stripUnwanted = true): \DOMNode|string
     {
         #Sanitize length
         if ($length < 0) {
@@ -27,7 +27,7 @@ class HTMLCut
         }
         if (is_string($string)) {
             #Remove HTML comments, CDATA and DOCTYPE
-            $string = preg_replace('/\s*<!DOCTYPE[^>[]*(\[[^]]*])?>\s*/muis', '', preg_replace('/\s*<!\[CDATA\[.*?]]>\s*/muis', '', preg_replace('/\s*<!--.*?-->\s*/muis', '', $string)));
+            $string = preg_replace('/\s*<!DOCTYPE[^>[]*(\[[^]]*])?>\s*/mui', '', preg_replace('/\s*<!\[CDATA\[.*?]]>\s*/muis', '', preg_replace('/\s*<!--.*?-->\s*/muis', '', $string)));
             #Check if string is too long without HTML tags
             $initialLength = mb_strlen(strip_tags($string), 'UTF-8');
             if ($initialLength > $length) {
@@ -72,7 +72,7 @@ class HTMLCut
                             $html->childNodes->item($key)->nodeValue = preg_replace('/^(.{'.(($length - $newLength) > 0 ? '1,'.($length - $newLength) : '0,0').'}\b)(.*)/siu', '$1', $html->childNodes->item($key)->nodeValue);
                         } else {
                             #Recurse and replace current node with new (possibly cut) node
-                            $html->replaceChild($this->Cut($node, $length - $newLength), $node);
+                            $html->replaceChild(self::Cut($node, $length - $newLength), $node);
                         }
                         #Get length of updated node
                         $nodeLength = mb_strlen(strip_tags($html->childNodes->item($key)->nodeValue), 'UTF-8');
@@ -97,14 +97,14 @@ class HTMLCut
                 $xpath = new \DOMXPath($html);
                 #Remove all tags, that do not make sense or have potential to harm in a preview
                 if ($stripUnwanted) {
-                    foreach ($xpath->query(implode('|', array_map(function($val) { return '//'.$val;} , $this->extraTags))) as $node) {
+                    foreach ($xpath->query(implode('|', array_map(function($val) { return '//'.$val;} , self::$extraTags))) as $node) {
                         $node->parentNode->removeChild($node);
                     }
                 }
                 #Reduce number of paragraphs shown
                 if ($paragraphs > 0) {
                     #Get current number of paragraphs. Also counting other elements, that generally look as separate paragraphs.
-                    $curPar = $xpath->query(implode('|', array_map(function($val) { return '//'.$val;} , $this->paraTags)))->length;
+                    $curPar = $xpath->query(implode('|', array_map(function($val) { return '//'.$val;} , self::$paraTags)))->length;
                     #Check if number of current paragraphs is larger than allowed. Do not do processing, if it's not.
                     if ($curPar > $paragraphs) {
                         #Get all tags
@@ -115,7 +115,7 @@ class HTMLCut
                             if ($curPar > $paragraphs) {
                                 #Get actual node
                                 $node = $tags->item($i);
-                                if (in_array(strtolower($node->nodeName), $this->paraTags)) {
+                                if (in_array(strtolower($node->nodeName), self::$paraTags)) {
                                     $curPar--;
                                 }
                                 #Remove node
@@ -154,7 +154,7 @@ class HTMLCut
         #Return
         if (isset($newString)) {
             #Remove some common punctuation from the end of the string (if any). These elements, when found ad the end of string, may look out of place. Also remove any excessive <br> at the beginning and end of the string.
-            $string = preg_replace('/(^(<br>)+)|((<br>)+$)/iu', '', preg_replace($this->punctuation, '', $newString));
+            $string = preg_replace('/(^(<br>)+)|((<br>)+$)/iu', '', preg_replace(self::$punctuation, '', $newString));
             #Return with ellipsis
             return nl2br(trim($string)).($initialLength > $length ? $ellipsis : '');
         } else {
