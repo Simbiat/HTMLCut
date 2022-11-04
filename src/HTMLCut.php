@@ -166,9 +166,9 @@ class HTMLCut
                 $string = preg_replace('/\s*<\/p>\s*$/ui', '', $string);
             }
             #Return with ellipsis
-            return nl2br(trim($string)).($initialLength > $length ? $ellipsis : '');
+            return trim($string).($initialLength > $length ? $ellipsis : '');
         } else {
-            return nl2br(trim($string));
+            return trim($string);
         }
     }
 }
