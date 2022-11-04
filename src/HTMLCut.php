@@ -25,9 +25,13 @@ class HTMLCut
         if ($paragraphs < 0) {
             $paragraphs = 0;
         }
+        $preserveP = false;
         if (is_string($string)) {
             #Remove HTML comments, CDATA and DOCTYPE
             $string = preg_replace('/\s*<!DOCTYPE[^>[]*(\[[^]]*])?>\s*/mui', '', preg_replace('/\s*<!\[CDATA\[.*?]]>\s*/muis', '', preg_replace('/\s*<!--.*?-->\s*/muis', '', $string)));
+            if (preg_match('/^\s*<p>\s*/ui', $string) === 1) {
+                $preserveP = true;
+            }
             #Check if string is too long without HTML tags
             $initialLength = mb_strlen(strip_tags($string), 'UTF-8');
             if ($initialLength > $length) {
@@ -155,6 +159,12 @@ class HTMLCut
         if (isset($newString)) {
             #Remove some common punctuation from the end of the string (if any). These elements, when found ad the end of string, may look out of place. Also remove any excessive <br> at the beginning and end of the string.
             $string = preg_replace('/(^(<br>)+)|((<br>)+$)/iu', '', preg_replace(self::$punctuation, '', $newString));
+            #If we did not have a <p> tag at the beginning of the string and now new string has it - remove it, since it was added by conversion to HTML
+            if (!$preserveP && preg_match('/^\s*<p>\s*/ui', $string) === 1) {
+                $string = preg_replace('/^\s*<p>\s*/ui', '', $string);
+                #Also remove closing tag from the end
+                $string = preg_replace('/\s*<\/p>\s*$/ui', '', $string);
+            }
             #Return with ellipsis
             return nl2br(trim($string)).($initialLength > $length ? $ellipsis : '');
         } else {
