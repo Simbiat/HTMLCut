@@ -33,7 +33,7 @@ class HTMLCut
                 $preserveP = true;
             }
             #Check if string is too long without HTML tags
-            $initialLength = mb_strlen(strip_tags($string), 'UTF-8');
+            $initialLength = mb_strlen(strip_tags(html_entity_decode($string, ENT_QUOTES | ENT_SUBSTITUTE | ENT_HTML5)), 'UTF-8');
             if ($initialLength > $length) {
                 #Convert to HTML DOM object
                 $html = new \DOMDocument(encoding: 'UTF-8');
@@ -46,7 +46,7 @@ class HTMLCut
             }
         } else {
             #We already have a DOMNode
-            $initialLength = mb_strlen(strip_tags($string->nodeValue ?? $string->textContent), 'UTF-8');
+            $initialLength = mb_strlen(strip_tags(html_entity_decode($string->nodeValue ?? $string->textContent, ENT_QUOTES | ENT_SUBSTITUTE | ENT_HTML5)), 'UTF-8');
             $html = $string;
         }
         if (isset($html)) {
@@ -62,7 +62,7 @@ class HTMLCut
                         continue;
                     }
                     #Get length of current node
-                    $nodeLength = mb_strlen(strip_tags($node->nodeValue ?? $node->textContent), 'UTF-8');
+                    $nodeLength = mb_strlen(strip_tags(html_entity_decode($node->nodeValue ?? $node->textContent, ENT_QUOTES | ENT_SUBSTITUTE | ENT_HTML5)), 'UTF-8');
                     #Check if it fits
                     if ($newLength + $nodeLength <= $length) {
                         #Increase current length
@@ -73,19 +73,27 @@ class HTMLCut
                         #Check if DOMText
                         if ($node instanceof \DOMText) {
                             #Cut directly in the DOM. Regex allows to retain whole words.
-                            $html->childNodes->item($key)->nodeValue = preg_replace('/^(.{'.(($length - $newLength) > 0 ? '1,'.($length - $newLength) : '0,0').'}\b)(.*)/siu', '$1', $html->childNodes->item($key)->nodeValue);
+                            $html->childNodes->item($key)->nodeValue = preg_replace('/^(((&(?:[a-z\d]+|#\d+|#x[a-f\d]+);)|.){'.(($length - $newLength) > 0 ? '1,'.($length - $newLength) : '0,0').'}\b)(.*)/siu', '$1', $html->childNodes->item($key)->nodeValue);
                         } else {
                             #Recurse and replace current node with new (possibly cut) node
-                            $html->replaceChild(self::Cut($node, $length - $newLength), $node);
+                            $newNode = self::Cut($node, $length - $newLength);
+                            if (empty($newNode->nodeValue)) {
+                                $node->parentNode->removeChild($node);
+                            } else {
+                                $html->replaceChild($newNode, $node);
+                            }
                         }
                         #Get length of updated node
-                        $nodeLength = mb_strlen(strip_tags($html->childNodes->item($key)->nodeValue), 'UTF-8');
+                        $nodeLength = mb_strlen(strip_tags(html_entity_decode($html->childNodes->item($key)->nodeValue, ENT_QUOTES | ENT_SUBSTITUTE | ENT_HTML5)), 'UTF-8');
                         if ($newLength + $nodeLength <= $length) {
                             #Update current length
                             $newLength += $nodeLength;
                         } else {
-                            #Remove child, since its excessive
-                            $node->parentNode->removeChild($node);
+                            #Check if parent node is not null. If it is - it means we already removed the node on previous step
+                            if (!is_null($node->parentNode)) {
+                                #Remove child, since its excessive
+                                $node->parentNode->removeChild($node);
+                            }
                         }
                     }
                 }
@@ -93,7 +101,7 @@ class HTMLCut
                 #Check if what we have is already a \DOMText
                 if ($html instanceof \DOMText) {
                     #Cut directly in the DOM. Regex allows to retain whole words. We also trim the text inside the nodes
-                    $html->nodeValue = preg_replace('/>\s+/ui', '>', preg_replace('/\s+</ui', '<', preg_replace('/^(.{'.(($length - $newLength) > 0 ? '1,'.($length - $newLength) : '0,0').'}\b)(.*)/siu', '$1', $html->nodeValue)));
+                    $html->nodeValue = preg_replace('/>\s+/ui', '>', preg_replace('/\s+</ui', '<', preg_replace('/^(((&(?:[a-z\d]+|#\d+|#x[a-f\d]+);)|.){'.(($length - $newLength) > 0 ? '1,'.($length - $newLength) : '0,0').'}\b)(.*)/siu', '$1', $html->nodeValue)));
                 }
             }
             if ($html instanceof \DOMDocument) {
