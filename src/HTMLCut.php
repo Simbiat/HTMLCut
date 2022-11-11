@@ -52,22 +52,31 @@ class HTMLCut
         if (isset($html)) {
             #Set new length
             $newLength = 0;
+            #This if a flag to indicate that we determined, that we've cut enough already
+            $finalCut = false;
             #Check of node has children
-            if (count($html->childNodes) > 0) {
+            $nodesCount = count($html->childNodes);
+            if ($nodesCount > 0) {
+                #Prepare array for list of nodes, that we are keeping
+                $nodesToKeep = [];
                 #Iterrate children. While theoretically we can use the getElementsByTagName (as is also done further down the code), I was not able to get consistent results with it on this step, often not getting any text whatsoever.
                 foreach ($html->childNodes as $key=>$node) {
-                    #Remove HTML comments, CDATA and DOCTYPE
+                    #Skip HTML comments, CDATA and DOCTYPE
                     if ($node instanceof \DOMComment || $node instanceof \DOMCdataSection || $node instanceof \DOMNotation) {
-                        $html->removeChild($node);
+                        continue;
+                    }
+                    #Skip node, if we determined that final cut was done on a previous iteration
+                    if ($finalCut) {
                         continue;
                     }
                     #Get length of current node
-                    $nodeLength = mb_strlen(strip_tags(html_entity_decode($node->nodeValue ?? $node->textContent, ENT_QUOTES | ENT_SUBSTITUTE | ENT_HTML5)), 'UTF-8');
+                    $nodeLengthBeforeCut = mb_strlen(strip_tags(html_entity_decode($node->nodeValue ?? $node->textContent, ENT_QUOTES | ENT_SUBSTITUTE | ENT_HTML5)), 'UTF-8');
                     #Check if it fits
-                    if ($newLength + $nodeLength <= $length) {
+                    if ($newLength + $nodeLengthBeforeCut <= $length) {
                         #Increase current length
-                        $newLength += $nodeLength;
-                        #Go to next node
+                        $newLength += $nodeLengthBeforeCut;
+                        #Add to list of nodes to preserve and go to next node
+                        $nodesToKeep[] = $key;
                     } else {
                         #Need to cut the value
                         #Check if DOMText
@@ -77,24 +86,30 @@ class HTMLCut
                         } else {
                             #Recurse and replace current node with new (possibly cut) node
                             $newNode = self::Cut($node, $length - $newLength);
-                            if (empty($newNode->nodeValue)) {
-                                $node->parentNode->removeChild($node);
-                            } else {
+                            if (!empty($newNode->nodeValue)) {
                                 $html->replaceChild($newNode, $node);
                             }
                         }
                         #Get length of updated node
-                        $nodeLength = mb_strlen(strip_tags(html_entity_decode($html->childNodes->item($key)->nodeValue, ENT_QUOTES | ENT_SUBSTITUTE | ENT_HTML5)), 'UTF-8');
-                        if ($newLength + $nodeLength <= $length) {
+                        $nodeLengthAfterCut = mb_strlen(strip_tags(html_entity_decode($html->childNodes->item($key)->nodeValue, ENT_QUOTES | ENT_SUBSTITUTE | ENT_HTML5)), 'UTF-8');
+                        if ($newLength + $nodeLengthAfterCut <= $length) {
                             #Update current length
-                            $newLength += $nodeLength;
-                        } else {
-                            #Check if parent node is not null. If it is - it means we already removed the node on previous step
-                            if (!is_null($node->parentNode)) {
-                                #Remove child, since its excessive
-                                $node->parentNode->removeChild($node);
+                            $newLength += $nodeLengthAfterCut;
+                            #If original content, that we were cutting was long enough for the length, we required, and we did cut it, it means, that there is no point to cut further, otherwise content may be taken out of the middle of text
+                            if ($nodeLengthBeforeCut >= $length) {
+                                $finalCut = true;
                             }
+                            #Add to list of nodes to preserve and go to next node
+                            $nodesToKeep[] = $key;
                         }
+                    }
+                }
+                #Remove all excessive nodes from $html. Need to do it separately, sine removal works only if we iterate in reverse
+                #We can safely do this at this point, because we have updated the nodes' values appropriately already, so if something was cut - it's already there in the DOM
+                for ($key = $nodesCount; --$key >= 0; ) {
+                    if (!in_array($key, $nodesToKeep)) {
+                        $node = $html->childNodes->item($key);
+                        $node->parentNode->removeChild($node);
                     }
                 }
             } else {
@@ -109,8 +124,11 @@ class HTMLCut
                 $xpath = new \DOMXPath($html);
                 #Remove all tags, that do not make sense or have potential to harm in a preview
                 if ($stripUnwanted) {
-                    foreach ($xpath->query(implode('|', array_map(function($val) { return '//'.$val;} , self::$extraTags))) as $node) {
-                        $node->parentNode->removeChild($node);
+                    $unwantedTags = $xpath->query(implode('|', array_map(function($val) { return '//'.$val;} , self::$extraTags)));
+                    $unwantedCount = count($unwantedTags);
+                    for ($key = $unwantedCount; --$key >= 0; ) {
+                            $node = $unwantedTags[$key];
+                            $node->parentNode->removeChild($node);
                     }
                 }
                 #Reduce number of paragraphs shown
@@ -138,7 +156,9 @@ class HTMLCut
                 }
                 #Remove all empty nodes (taken from https://stackoverflow.com/questions/40367047/remove-all-empty-html-elements-using-php-domdocument). Using `while` allows for recursion
                 while (($node_list = $xpath->query('//*[not(*) and not(@*) and not(text()[normalize-space()])]')) && $node_list->length) {
-                    foreach ($node_list as $node) {
+                    $emptyCount = count($node_list);
+                    for ($key = $emptyCount; --$key >= 0; ) {
+                        $node = $node_list[$key];
                         $node->parentNode->removeChild($node);
                     }
                 }
@@ -155,12 +175,12 @@ class HTMLCut
         #Reduce number of paragraphs shown. While this has been done in terms of pure HTML, there is a chance, that we have regular text with regular newlines.
         if ($paragraphs > 0) {
             #Remove any whitespace between HTML tags, newlines before/after tags and also trim (as precaution)
-            $string = trim(preg_replace('/([><])(\r+\n+|\r+|\n+)/iu', '$1', preg_replace('/(\r+\n+|\r+|\n+)([><])/iu', '$2', preg_replace('/>\s+</mu', '><', $string))));
+            $string = trim(preg_replace('/([><])(\R+)/u', '$1', preg_replace('/(\R+)([><])/u', '$2', preg_replace('/>\s+</mu', '><', $string))));
             #Explode by newlines  (treat multiple newlines as one)
-            $curPar = preg_split('/\r+\n+|\r+|\n+/u', $string);
+            $curPar = preg_split('/\R+/u', $string);
             if (count($curPar) > $paragraphs) {
                 #Slice and then implode back
-                $newString = implode('<br>', array_slice($curPar, 0, $paragraphs));
+                $newString = implode("\r\n", array_slice($curPar, 0, $paragraphs));
             }
         }
         #Return
@@ -173,8 +193,10 @@ class HTMLCut
                 #Also remove closing tag from the end
                 $string = preg_replace('/\s*<\/p>\s*$/ui', '', $string);
             }
-            #Return with ellipsis
-            return trim($string).($initialLength > $length ? $ellipsis : '');
+            #Get current length
+            $currentLength = mb_strlen(strip_tags(html_entity_decode($string, ENT_QUOTES | ENT_SUBSTITUTE | ENT_HTML5)), 'UTF-8');
+            #Return with optional ellipsis
+            return trim($string).($initialLength > $currentLength ? $ellipsis : '');
         } else {
             return trim($string);
         }
