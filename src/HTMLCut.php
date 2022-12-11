@@ -26,6 +26,7 @@ class HTMLCut
             $paragraphs = 0;
         }
         $preserveP = false;
+        $wrappedInHTML = false;
         if (is_string($string)) {
             #Remove HTML comments, CDATA and DOCTYPE
             $string = preg_replace('/\s*<!DOCTYPE[^>[]*(\[[^]]*])?>\s*/mui', '', preg_replace('/\s*<!\[CDATA\[.*?]]>\s*/muis', '', preg_replace('/\s*<!--.*?-->\s*/muis', '', $string)));
@@ -34,6 +35,14 @@ class HTMLCut
             }
             #Check if string is too long without HTML tags
             $initialLength = mb_strlen(strip_tags(html_entity_decode($string, ENT_QUOTES | ENT_SUBSTITUTE | ENT_HTML5)), 'UTF-8');
+            #We need to wrap in HTML, due to behavior of LIBXML_HTML_NOIMPLIED and LibXML, but the string may be already wrapped.
+            #If we do not do it, the HTML can get corrupted due to how the library processes the string.
+            #More details on https://stackoverflow.com/questions/29493678/
+            if (preg_match('/^\s*<html( [^<>]*)?>.*<\/html>\s*$/uis', $string) === 1) {
+                $wrappedInHTML = true;
+            } else {
+                $string = '<html>'.$string.'</html>';
+            }
             if ($initialLength > $length) {
                 #Convert to HTML DOM object
                 $html = new \DOMDocument(encoding: 'UTF-8');
@@ -171,6 +180,11 @@ class HTMLCut
         #Check if string got updated
         if (isset($newString)) {
             $string = $newString;
+            $newString = null;
+        }
+        #Strip the excessive HTML tags, if we added them
+        if ($wrappedInHTML === false) {
+            $string = preg_replace('/(^\s*<html( [^<>]*)?>)(.*)(<\/html>\s*$)/uis', '$3', $string);
         }
         #Reduce number of paragraphs shown. While this has been done in terms of pure HTML, there is a chance, that we have regular text with regular newlines.
         if ($paragraphs > 0) {
@@ -180,25 +194,59 @@ class HTMLCut
             $curPar = preg_split('/\R+/u', $string);
             if (count($curPar) > $paragraphs) {
                 #Slice and then implode back
-                $newString = implode("\r\n", array_slice($curPar, 0, $paragraphs));
+                $string = implode("\r\n", array_slice($curPar, 0, $paragraphs));
             }
         }
-        #Return
-        if (isset($newString)) {
-            #Remove some common punctuation from the end of the string (if any). These elements, when found ad the end of string, may look out of place. Also remove any excessive <br> at the beginning and end of the string.
-            $string = preg_replace('/(^(<br>)+)|((<br>)+$)/iu', '', preg_replace(self::$punctuation, '', $newString));
-            #If we did not have a <p> tag at the beginning of the string and now new string has it - remove it, since it was added by conversion to HTML
-            if (!$preserveP && preg_match('/^\s*<p>\s*/ui', $string) === 1) {
-                $string = preg_replace('/^\s*<p>\s*/ui', '', $string);
-                #Also remove closing tag from the end
-                $string = preg_replace('/\s*<\/p>\s*$/ui', '', $string);
+        #Remove some common punctuation from the end of the string (if any). These elements, when found ad the end of string, may look out of place. Also remove any excessive <br> at the beginning and end of the string.
+        $string = preg_replace('/(^(<br>)+)|((<br>)+$)/iu', '', preg_replace(self::$punctuation, '', $string));
+        #If we did not have a <p> tag at the beginning of the string and now new string has it - remove it, since it was added by conversion to HTML
+        if (!$preserveP && preg_match('/^\s*<p>\s*/ui', $string) === 1) {
+            $string = preg_replace('/^\s*<p>\s*/ui', '', $string);
+            #Also remove closing tag from the end
+            $string = preg_replace('/\s*<\/p>\s*$/ui', '', $string);
+        }
+        #Get current length
+        $currentLength = mb_strlen(strip_tags(html_entity_decode($string, ENT_QUOTES | ENT_SUBSTITUTE | ENT_HTML5)), 'UTF-8');
+        $string = trim($string);
+        #Return with optional ellipsis
+        if ($initialLength > $currentLength) {
+            #Check if we have any closing tags at the end (most likely we do)
+            $closingTagsString = preg_replace('/^(.*[^><\/\s]+)((\s*<\s*\/\s*[a-z-A-Z\d\-]+\s*>\s*)+)$/uis', '$2', $string);
+            #If no closing tags found - add ellipsis to the end of string
+            if (preg_match('/^\s*$/ui', $closingTagsString) === 1) {
+                return $string.$ellipsis;
             }
-            #Get current length
-            $currentLength = mb_strlen(strip_tags(html_entity_decode($string, ENT_QUOTES | ENT_SUBSTITUTE | ENT_HTML5)), 'UTF-8');
-            #Return with optional ellipsis
-            return trim($string).($initialLength > $currentLength ? $ellipsis : '');
+            #Get the tags
+            $closingTags = preg_split('/(\s*<\s*\/\s*)|(\s*>\s*)|(\s*>\s*<\s*\/\s*)/', $closingTagsString, -1, PREG_SPLIT_NO_EMPTY);
+            $closingTags = array_reverse($closingTags, true);
+            #Iterrate from the end of the array to find the last tag, that can semantically have text
+            $lastTag = '';
+            foreach ($closingTags as $tag) {
+                if (in_array(strtolower($tag), [
+                    #Content sectioning tags, which still can have text directly inside
+                    'address', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'article', 'section', 'aside',
+                    #Text blocks, that can have text directly inside of them. UL and OL, for example can have it only in child `li` elements, thus they do not fit.
+                    'blockquote', 'dd', 'div', 'dl', 'dt', 'figcaption', 'li', 'p', 'pre',
+                    #Inline elements
+                    'a', 'abbr', 'b', 'bdi', 'bdo', 'cite', 'code', 'data', 'dfn', 'em', 'i', 'kbd', 'mark', 'q', 's', 'samp', 'small', 'span', 'strong', 'sub', 'sup', 'time', 'u', 'var',
+                    #Other tags, that may have text directly in them
+                    'noscript', 'del', 'ins', 'td', 'th', 'caption', 'details', 'dialog',
+                ])) {
+                    #Tag found - stop loop
+                    $lastTag = $tag;
+                    break;
+                }
+            }
+            #If suitable tag was not found, add ellipsis to the end of string
+            if (empty($lastTag)) {
+                return $string.$ellipsis;
+            }
+            #If found - add ellipsis before the closing tag. `strrev` is used in order to replace the last occurrence of the closing tag exactly.
+            $closingTagsNew = strrev(preg_replace('/(\s*>\s*'.strrev($lastTag).'\/\s*<)/uis', '$1'.strrev($ellipsis), strrev($closingTagsString), 1));
+            #Replace tags in the string itself
+            return substr_replace($string, $closingTagsNew, strrpos($string, $closingTagsString), strlen($closingTagsString));
         } else {
-            return trim($string);
+            return $string;
         }
     }
 }
