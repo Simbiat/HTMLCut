@@ -13,7 +13,7 @@ class HTMLCut
         'article', 'aside', 'div', 'li', 'p', 'section',
     ];
     #Regex to remove punctuation symbols from the end of the string, that may make no sense there
-    private static string $punctuation = '/([:;,\[(\-{<_„“‘«「﹁‹『﹃《〈]+|\.{2,})$/ui';
+    private static string $punctuation = '/([:;,\[(\-{<_„“‘«「﹁‹『﹃《〈]+|\.{2,})$/u';
 
     public static function Cut(\DOMNode|string $string, int $length, int $paragraphs = 0, string $ellipsis = '…', bool $stripUnwanted = true): \DOMNode|string
     {
@@ -29,7 +29,7 @@ class HTMLCut
         $wrappedInHTML = false;
         if (is_string($string)) {
             #Remove HTML comments, CDATA and DOCTYPE
-            $string = preg_replace('/\s*<!DOCTYPE[^>[]*(\[[^]]*])?>\s*/mui', '', preg_replace('/\s*<!\[CDATA\[.*?]]>\s*/muis', '', preg_replace('/\s*<!--.*?-->\s*/muis', '', $string)));
+            $string = preg_replace('/\s*<!DOCTYPE[^>[]*(\[[^]]*])?>\s*/mui', '', preg_replace('/\s*<!\[CDATA\[.*?]]>\s*/muis', '', preg_replace('/\s*<!--.*?-->\s*/mus', '', $string)));
             if (preg_match('/^\s*<p>\s*/ui', $string) === 1) {
                 $preserveP = true;
             }
@@ -41,6 +41,8 @@ class HTMLCut
             if (preg_match('/^\s*<html( [^<>]*)?>.*<\/html>\s*$/uis', $string) === 1) {
                 $wrappedInHTML = true;
             } else {
+                #Suppressing inspection, since we do not need the language for the purpose of the library
+                /** @noinspection HtmlRequiredLangAttribute */
                 $string = '<html>'.$string.'</html>';
             }
             if ($initialLength > $length) {
@@ -116,24 +118,23 @@ class HTMLCut
                 #Remove all excessive nodes from $html. Need to do it separately, sine removal works only if we iterate in reverse
                 #We can safely do this at this point, because we have updated the nodes' values appropriately already, so if something was cut - it's already there in the DOM
                 for ($key = $nodesCount; --$key >= 0; ) {
-                    if (!in_array($key, $nodesToKeep)) {
+                    if (!in_array($key, $nodesToKeep, true)) {
                         $node = $html->childNodes->item($key);
-                        $node->parentNode->removeChild($node);
+                        if (!is_null($node)) {
+                            $node->parentNode->removeChild($node);
+                        }
                     }
                 }
-            } else {
-                #Check if what we have is already a \DOMText
-                if ($html instanceof \DOMText) {
-                    #Cut directly in the DOM. Regex allows to retain whole words. We also trim the text inside the nodes
-                    $html->nodeValue = preg_replace('/>\s+/ui', '>', preg_replace('/\s+</ui', '<', preg_replace('/^(((&(?:[a-z\d]+|#\d+|#x[a-f\d]+);)|.){'.(($length - $newLength) > 0 ? '1,'.($length - $newLength) : '0,0').'}\b)(.*)/siu', '$1', $html->nodeValue)));
-                }
+            } elseif ($html instanceof \DOMText) {
+                #Cut directly in the DOM. Regex allows to retain whole words. We also trim the text inside the nodes
+                $html->nodeValue = preg_replace('/>\s+/u', '>', preg_replace('/\s+</u', '<', preg_replace('/^(((&(?:[a-z\d]+|#\d+|#x[a-f\d]+);)|.){'.(($length - $newLength) > 0 ? '1,'.($length - $newLength) : '0,0').'}\b)(.*)/siu', '$1', $html->nodeValue)));
             }
             if ($html instanceof \DOMDocument) {
                 #Set xpath variable
                 $xpath = new \DOMXPath($html);
                 #Remove all tags, that do not make sense or have potential to harm in a preview
                 if ($stripUnwanted) {
-                    $unwantedTags = $xpath->query(implode('|', array_map(function($val) { return '//'.$val;} , self::$extraTags)));
+                    $unwantedTags = $xpath->query(implode('|', array_map(static function($val) { return '//'.$val;} , self::$extraTags)));
                     $unwantedCount = count($unwantedTags);
                     for ($key = $unwantedCount; --$key >= 0; ) {
                             $node = $unwantedTags[$key];
@@ -143,7 +144,7 @@ class HTMLCut
                 #Reduce number of paragraphs shown
                 if ($paragraphs > 0) {
                     #Get current number of paragraphs. Also counting other elements, that generally look as separate paragraphs.
-                    $curPar = $xpath->query(implode('|', array_map(function($val) { return '//'.$val;} , self::$paraTags)))->length;
+                    $curPar = $xpath->query(implode('|', array_map(static function($val) { return '//'.$val;} , self::$paraTags)))->length;
                     #Check if number of current paragraphs is larger than allowed. Do not do processing, if it's not.
                     if ($curPar > $paragraphs) {
                         #Get all tags
@@ -154,7 +155,7 @@ class HTMLCut
                             if ($curPar > $paragraphs) {
                                 #Get actual node
                                 $node = $tags->item($i);
-                                if (in_array(strtolower($node->nodeName), self::$paraTags)) {
+                                if (in_array(mb_strtolower($node->nodeName, 'UTF-8'), self::$paraTags, true)) {
                                     $curPar--;
                                 }
                                 #Remove node
@@ -164,7 +165,7 @@ class HTMLCut
                     }
                 }
                 #Remove all empty nodes (taken from https://stackoverflow.com/questions/40367047/remove-all-empty-html-elements-using-php-domdocument). Using `while` allows for recursion
-                while (($node_list = $xpath->query('//*[not(*) and not(@*) and not(text()[normalize-space()])]')) && $node_list->length) {
+                while (($node_list = $xpath->query('//*[not(*) and not(@*) and not(text()[string-length(normalize-space()) > 0])]')) && $node_list->length) {
                     $emptyCount = count($node_list);
                     for ($key = $emptyCount; --$key >= 0; ) {
                         $node = $node_list[$key];
@@ -172,13 +173,13 @@ class HTMLCut
                     }
                 }
                 #Update string by saving object as HTML string, but strip some standard tags added by PHP
-                $newString = preg_replace('/>\s+/ui', '>', preg_replace('/\s+</ui', '<', preg_replace('/(<!DOCTYPE html PUBLIC "-\/\/W3C\/\/DTD HTML 4\.0 Transitional\/\/EN" "http:\/\/www\.w3\.org\/TR\/REC-html40\/loose\.dtd">\s*<html>\s*<body>\s*)(.*)(<\/body><\/html>)/uis', '$2', $html->saveHTML())));
+                $newString = preg_replace('/>\s+/u', '>', preg_replace('/\s+</u', '<', preg_replace('/(<!DOCTYPE html PUBLIC "-\/\/W3C\/\/DTD HTML 4\.0 Transitional\/\/EN" "http:\/\/www\.w3\.org\/TR\/REC-html40\/loose\.dtd">\s*<html>\s*<body>\s*)(.*)(<\/body><\/html>)/uis', '$2', $html->saveHTML())));
             } else {
                 return $html;
             }
         }
         #Check if string got updated
-        if (isset($newString)) {
+        if (isset($newString) && is_string($newString)) {
             $string = $newString;
             $newString = null;
         }
@@ -213,7 +214,7 @@ class HTMLCut
             #Check if we have any closing tags at the end (most likely we do)
             $closingTagsString = preg_replace('/^(.*[^><\/\s]+)((\s*<\s*\/\s*[a-z-A-Z\d\-]+\s*>\s*)+)$/uis', '$2', $string);
             #If no closing tags found - add ellipsis to the end of string
-            if (preg_match('/^\s*$/ui', $closingTagsString) === 1) {
+            if (preg_match('/^\s*$/u', $closingTagsString) === 1) {
                 return $string.$ellipsis;
             }
             #Get the tags
@@ -222,7 +223,7 @@ class HTMLCut
             #Iterrate from the end of the array to find the last tag, that can semantically have text
             $lastTag = '';
             foreach ($closingTags as $tag) {
-                if (in_array(strtolower($tag), [
+                if (in_array(mb_strtolower($tag, 'UTF-8'), [
                     #Content sectioning tags, which still can have text directly inside
                     'address', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'article', 'section', 'aside',
                     #Text blocks, that can have text directly inside of them. UL and OL, for example can have it only in child `li` elements, thus they do not fit.
@@ -244,9 +245,8 @@ class HTMLCut
             #If found - add ellipsis before the closing tag. `strrev` is used in order to replace the last occurrence of the closing tag exactly.
             $closingTagsNew = strrev(preg_replace('/(\s*>\s*'.strrev($lastTag).'\/\s*<)/uis', '$1'.strrev($ellipsis), strrev($closingTagsString), 1));
             #Replace tags in the string itself
-            return substr_replace($string, $closingTagsNew, strrpos($string, $closingTagsString), strlen($closingTagsString));
-        } else {
-            return $string;
+            return substr_replace($string, $closingTagsNew, mb_strrpos($string, $closingTagsString, 0, 'UTF-8'), mb_strlen($closingTagsString, 'UTF-8'));
         }
+        return $string;
     }
 }
