@@ -1,20 +1,45 @@
 <?php
-declare(strict_types=1);
+declare(strict_types = 1);
+
 namespace Simbiat;
 
+use function count, is_string, in_array;
+
+/**
+ * This is a class to cut HTML while preserving (to an extent) HTML structure.
+ */
 class HTMLCut
 {
-    #Tags, that we consider irrelevant or harmful for preview
+    /**
+     * Tags, that we consider irrelevant or harmful for preview
+     * @var array|string[]
+     */
     public static array $extraTags = [
         'applet', 'area', 'audio', 'base', 'blockquote', 'button', 'canvas', 'code', 'col', 'data', 'datalist', 'details', 'dialog', 'dir', 'embed', 'fieldset', 'figcapture', 'figure', 'font', 'footer', 'form', 'frame', 'frameset', 'header', 'iframe', 'img', 'input', 'ins', 'kbd', 'legend', 'link', 'main', 'map', 'meta', 'nav', 'noframes', 'noscript', 'object', 'optgroup', 'option', 'output', 'picture', 'pre', 'progress', 'q', 'rp', 'rt', 'ruby', 'samp', 'script', 'select', 'source', 'style', 'summary', 'svg', 'table', 'tbody', 'td', 'template', 'textarea', 'tfoot', 'th', 'thead', 'title', 'tr', 'track', 'tt', 'var', 'video',
     ];
-    #Tags that we consider paragraphs
+    /**
+     * Tags that we consider paragraphs
+     * @var array|string[]
+     */
     public static array $paraTags = [
         'article', 'aside', 'div', 'li', 'p', 'section',
     ];
-    #Regex to remove punctuation symbols from the end of the string, that may make no sense there
+    /**
+     * Regex to remove punctuation symbols from the end of the string, that may make no sense there
+     * @var string
+     */
     private static string $punctuation = '/([:;,\[(\-{<_„“‘«「﹁‹『﹃《〈]+|\.{2,})$/u';
-
+    
+    /**
+     * Cut HTML to selected length
+     * @param \DOMNode|string $string        String or DOMNode to process.
+     * @param int             $length        Maximum length of the resulting string.
+     * @param int             $paragraphs    Maximum number of paragraphs allowed. `0` means not limit.
+     * @param string          $ellipsis      Symbol to use to indicate the string was cut. `…` (ellipsis, not 3 full-stops) is default one.
+     * @param bool            $stripUnwanted Whether to remove tags, potentially harmful for preview (from `$extraTags` list).
+     *
+     * @return \DOMNode|string
+     */
     public static function Cut(\DOMNode|string $string, int $length, int $paragraphs = 0, string $ellipsis = '…', bool $stripUnwanted = true): \DOMNode|string
     {
         #Sanitize length
@@ -71,7 +96,7 @@ class HTMLCut
                 #Prepare array for list of nodes, that we are keeping
                 $nodesToKeep = [];
                 #Iterrate children. While theoretically we can use the getElementsByTagName (as is also done further down the code), I was not able to get consistent results with it on this step, often not getting any text whatsoever.
-                foreach ($html->childNodes as $key=>$node) {
+                foreach ($html->childNodes as $key => $node) {
                     #Skip HTML comments, CDATA and DOCTYPE
                     if ($node instanceof \DOMComment || $node instanceof \DOMCdataSection || $node instanceof \DOMNotation) {
                         continue;
@@ -117,12 +142,10 @@ class HTMLCut
                 }
                 #Remove all excessive nodes from $html. Need to do it separately, sine removal works only if we iterate in reverse
                 #We can safely do this at this point, because we have updated the nodes' values appropriately already, so if something was cut - it's already there in the DOM
-                for ($key = $nodesCount; --$key >= 0; ) {
+                for ($key = $nodesCount; --$key >= 0;) {
                     if (!in_array($key, $nodesToKeep, true)) {
                         $node = $html->childNodes->item($key);
-                        if (!is_null($node)) {
-                            $node->parentNode->removeChild($node);
-                        }
+                        $node?->parentNode->removeChild($node);
                     }
                 }
             } elseif ($html instanceof \DOMText) {
@@ -134,17 +157,21 @@ class HTMLCut
                 $xpath = new \DOMXPath($html);
                 #Remove all tags, that do not make sense or have potential to harm in a preview
                 if ($stripUnwanted) {
-                    $unwantedTags = $xpath->query(implode('|', array_map(static function($val) { return '//'.$val;} , self::$extraTags)));
+                    $unwantedTags = $xpath->query(implode('|', array_map(static function ($val) {
+                        return '//'.$val;
+                    }, self::$extraTags)));
                     $unwantedCount = count($unwantedTags);
-                    for ($key = $unwantedCount; --$key >= 0; ) {
-                            $node = $unwantedTags[$key];
-                            $node->parentNode->removeChild($node);
+                    for ($key = $unwantedCount; --$key >= 0;) {
+                        $node = $unwantedTags[$key];
+                        $node->parentNode->removeChild($node);
                     }
                 }
                 #Reduce number of paragraphs shown
                 if ($paragraphs > 0) {
                     #Get current number of paragraphs. Also counting other elements, that generally look as separate paragraphs.
-                    $curPar = $xpath->query(implode('|', array_map(static function($val) { return '//'.$val;} , self::$paraTags)))->length;
+                    $curPar = $xpath->query(implode('|', array_map(static function ($val) {
+                        return '//'.$val;
+                    }, self::$paraTags)))->length;
                     #Check if number of current paragraphs is larger than allowed. Do not do processing, if it's not.
                     if ($curPar > $paragraphs) {
                         #Get all tags
@@ -167,7 +194,7 @@ class HTMLCut
                 #Remove all empty nodes (taken from https://stackoverflow.com/questions/40367047/remove-all-empty-html-elements-using-php-domdocument). Using `while` allows for recursion
                 while (($node_list = $xpath->query('//*[not(*) and not(@*) and not(text()[string-length(normalize-space()) > 0])]')) && $node_list->length) {
                     $emptyCount = count($node_list);
-                    for ($key = $emptyCount; --$key >= 0; ) {
+                    for ($key = $emptyCount; --$key >= 0;) {
                         $node = $node_list[$key];
                         $node->parentNode->removeChild($node);
                     }
@@ -195,7 +222,7 @@ class HTMLCut
             $curPar = preg_split('/\R+/u', $string);
             if (count($curPar) > $paragraphs) {
                 #Slice and then implode back
-                $string = implode("\r\n", array_slice($curPar, 0, $paragraphs));
+                $string = implode("\r\n", \array_slice($curPar, 0, $paragraphs));
             }
         }
         #Remove some common punctuation from the end of the string (if any). These elements, when found ad the end of string, may look out of place. Also remove any excessive <br> at the beginning and end of the string.
