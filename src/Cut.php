@@ -1,14 +1,14 @@
 <?php
 declare(strict_types = 1);
 
-namespace Simbiat;
+namespace Simbiat\HTML;
 
 use function count, is_string, in_array;
 
 /**
  * This is a class to cut HTML while preserving (to an extent) HTML structure.
  */
-class HTMLCut
+class Cut
 {
     /**
      * Tags, that we consider irrelevant or harmful for preview

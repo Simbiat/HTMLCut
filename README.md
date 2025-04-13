@@ -1,5 +1,3 @@
-# HTMLCut
-
 This is a class to cut HTML while preserving (to an extent) HTML structure. Can be used to create previews of articles, written in HTML and stored in database, for example. Will work just as well with regular text.
 
 ## Why?
@@ -29,10 +27,10 @@ __NOTICE:__ previous versions used `nl2br` when returning the string, but this w
 Example:
 
 ```php
-require __DIR__.'/lib/HTMLCut/src/HTMLCut.php';
+require __DIR__.'/lib/HTMLCut/src/Cut.php';
 $doc = new DOMDocument();
 $doc->loadHTML('<div>Testing cutting function</div>');
-echo \Simbiat\HTMLCut::Cut($doc, 10);
+echo \Simbiat\HTML\Cut::Cut($doc, 10);
 exit;
 ```
 
