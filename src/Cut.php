@@ -217,7 +217,7 @@ class Cut
         #Reduce number of paragraphs shown. While this has been done in terms of pure HTML, there is a chance, that we have regular text with regular newlines.
         if ($paragraphs > 0) {
             #Remove any whitespace between HTML tags, newlines before/after tags and also trim (as precaution)
-            $string = trim(preg_replace('/([><])(\R+)/u', '$1', preg_replace('/(\R+)([><])/u', '$2', preg_replace('/>\s+</mu', '><', $string))));
+            $string = mb_trim(preg_replace('/([><])(\R+)/u', '$1', preg_replace('/(\R+)([><])/u', '$2', preg_replace('/>\s+</mu', '><', $string))), encoding: 'UTF-8');
             #Explode by newlines  (treat multiple newlines as one)
             $curPar = preg_split('/\R+/u', $string);
             if (count($curPar) > $paragraphs) {
@@ -235,7 +235,7 @@ class Cut
         }
         #Get current length
         $currentLength = mb_strlen(strip_tags(html_entity_decode($string, ENT_QUOTES | ENT_SUBSTITUTE | ENT_HTML5)), 'UTF-8');
-        $string = trim($string);
+        $string = mb_trim($string, encoding: 'UTF-8');
         #Return with optional ellipsis
         if ($initialLength > $currentLength) {
             #Check if we have any closing tags at the end (most likely we do)
