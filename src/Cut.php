@@ -11,7 +11,7 @@ use function count, is_string, in_array;
 class Cut
 {
     /**
-     * Tags, that we consider irrelevant or harmful for preview
+     * Tags that we consider irrelevant or harmful for preview
      * @var array|string[]
      */
     public static array $extraTags = [
@@ -28,15 +28,15 @@ class Cut
      * Regex to remove punctuation symbols from the end of the string, that may make no sense there
      * @var string
      */
-    private static string $punctuation = '/([:;,\[(\-{<_„“‘«「﹁‹『﹃《〈]+|\.{2,})$/u';
+    public const string punctuation = '/([:;,\[(\-{<_„“‘«「﹁‹『﹃《〈]+|\.{2,})$/u';
     
     /**
-     * Cut HTML to selected length
+     * Cut HTML to the selected length
      * @param \DOMNode|string $string        String or DOMNode to process.
      * @param int             $length        Maximum length of the resulting string.
-     * @param int             $paragraphs    Maximum number of paragraphs allowed. `0` means not limit.
-     * @param string          $ellipsis      Symbol to use to indicate the string was cut. `…` (ellipsis, not 3 full-stops) is default one.
-     * @param bool            $stripUnwanted Whether to remove tags, potentially harmful for preview (from `$extraTags` list).
+     * @param int             $paragraphs    Maximum number of paragraphs allowed. `0` means no limit.
+     * @param string          $ellipsis      Symbol to use to indicate the string was cut. `…` (ellipsis, not 3 full-stops) is the default one.
+     * @param bool            $stripUnwanted Whether to remove tags, potentially harmful for preview (from the `$extraTags` list).
      *
      * @return \DOMNode|string
      */
@@ -226,7 +226,7 @@ class Cut
             }
         }
         #Remove some common punctuation from the end of the string (if any). These elements, when found ad the end of string, may look out of place. Also remove any excessive <br> at the beginning and end of the string.
-        $string = preg_replace('/(^(<br>)+)|((<br>)+$)/iu', '', preg_replace(self::$punctuation, '', $string));
+        $string = preg_replace('/(^(<br>)+)|((<br>)+$)/iu', '', preg_replace(self::punctuation, '', $string));
         #If we did not have a <p> tag at the beginning of the string and now new string has it - remove it, since it was added by conversion to HTML
         if (!$preserveP && preg_match('/^\s*<p>\s*/ui', $string) === 1) {
             $string = preg_replace('/^\s*<p>\s*/ui', '', $string);
