@@ -40,7 +40,7 @@ class Cut
      *
      * @return \DOMNode|string
      */
-    public static function Cut(\DOMNode|string $string, int $length, int $paragraphs = 0, string $ellipsis = '…', bool $stripUnwanted = true): \DOMNode|string
+    public static function cut(\DOMNode|string $string, int $length, int $paragraphs = 0, string $ellipsis = '…', bool $stripUnwanted = true): \DOMNode|string
     {
         #Sanitize length
         if ($length < 0) {
@@ -121,7 +121,7 @@ class Cut
                             $html->childNodes->item($key)->nodeValue = preg_replace('/^(((&(?:[a-z\d]+|#\d+|#x[a-f\d]+);)|.){'.(($length - $newLength) > 0 ? '1,'.($length - $newLength) : '0,0').'}\b)(.*)/siu', '$1', $html->childNodes->item($key)->nodeValue);
                         } else {
                             #Recurse and replace current node with new (possibly cut) node
-                            $newNode = self::Cut($node, $length - $newLength);
+                            $newNode = self::cut($node, $length - $newLength);
                             if (!empty($newNode->nodeValue)) {
                                 $html->replaceChild($newNode, $node);
                             }

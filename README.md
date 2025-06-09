@@ -30,7 +30,7 @@ Example:
 require __DIR__.'/lib/HTMLCut/src/Cut.php';
 $doc = new DOMDocument();
 $doc->loadHTML('<div>Testing cutting function</div>');
-echo \Simbiat\HTML\Cut::Cut($doc, 10);
+echo \Simbiat\HTML\Cut::cut($doc, 10);
 exit;
 ```
 
