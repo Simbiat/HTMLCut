@@ -28,7 +28,7 @@ class Cut
      * Regex to remove punctuation symbols from the end of the string, that may make no sense there
      * @var string
      */
-    public const string punctuation = '/([:;,\[(\-{<_„“‘«「﹁‹『﹃《〈]+|\.{2,})$/u';
+    public const string PUNCTUATION = '/([:;,\[(\-{<_„“‘«「﹁‹『﹃《〈]+|\.{2,})$/u';
     
     /**
      * Cut HTML to the selected length
@@ -226,7 +226,7 @@ class Cut
             }
         }
         #Remove some common punctuation from the end of the string (if any). These elements, when found ad the end of string, may look out of place. Also remove any excessive <br> at the beginning and end of the string.
-        $string = preg_replace('/(^(<br>)+)|((<br>)+$)/iu', '', preg_replace(self::punctuation, '', $string));
+        $string = preg_replace('/(^(<br>)+)|((<br>)+$)/iu', '', preg_replace(self::PUNCTUATION, '', $string));
         #If we did not have a <p> tag at the beginning of the string and now new string has it - remove it, since it was added by conversion to HTML
         if (!$preserveP && preg_match('/^\s*<p>\s*/ui', $string) === 1) {
             $string = preg_replace('/^\s*<p>\s*/ui', '', $string);
