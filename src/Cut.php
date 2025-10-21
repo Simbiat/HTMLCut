@@ -67,7 +67,7 @@ class Cut
             if (\preg_match('/^\s*<html( [^<>]*)?>.*<\/html>\s*$/uis', $string) === 1) {
                 $wrapped_in_html = true;
             } else {
-                #Suppressing inspection, since we do not need the language for the purpose of the library
+                #Suppressing inspection, since we don't need the language for the library
                 /** @noinspection HtmlRequiredLangAttribute */
                 $string = '<html>'.$string.'</html>';
             }
@@ -142,7 +142,7 @@ class Cut
                     }
                 }
                 #Remove all excessive nodes from $html. Need to do it separately, sine removal works only if we iterate in reverse
-                #We can safely do this at this point, because we have updated the nodes' values appropriately already, so if something was cut - it's already there in the DOM
+                #We can safely do this at this point, because we've updated the nodes' values appropriately already, so if something was cut - it is already there in the DOM
                 for ($key = $nodes_count; --$key >= 0;) {
                     if (!in_array($key, $nodes_to_keep, true)) {
                         $node = $html->childNodes->item($key);
