@@ -3,6 +3,7 @@ declare(strict_types = 1);
 
 namespace Simbiat\HTML;
 
+use Simbiat\StringHelpers\Sanitize;
 use function count, is_string, in_array;
 
 /**
@@ -236,13 +237,13 @@ class Cut
             #Check if we have any closing tags at the end (most likely we do)
             $closing_tags_string = \preg_replace('/^(.*[^><\/\s]+)((\s*<\s*\/\s*[a-z-A-Z\d\-]+\s*>\s*)+)$/uis', '$2', $string);
             #If no closing tags found - add ellipsis to the end of the string
-            if (\preg_match('/^\s*$/u', $closing_tags_string) === 1) {
+            if (Sanitize::whiteString($closing_tags_string)) {
                 return $string.$ellipsis;
             }
             #Get the tags
             $closing_tags = \preg_split('/(\s*<\s*\/\s*)|(\s*>\s*)|(\s*>\s*<\s*\/\s*)/', $closing_tags_string, -1, \PREG_SPLIT_NO_EMPTY);
             $closing_tags = \array_reverse($closing_tags, true);
-            #Iterrate from the end of the array to find the last tag that can semantically have some text
+            #Iterate from the end of the array to find the last tag that can semantically have some text
             $last_tag = '';
             foreach ($closing_tags as $tag) {
                 if (in_array(mb_strtolower($tag, 'UTF-8'), [
