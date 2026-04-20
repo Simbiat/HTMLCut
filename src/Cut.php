@@ -57,11 +57,16 @@ class Cut
         if (is_string($string)) {
             #Remove HTML comments, CDATA and DOCTYPE
             $string = \preg_replace(['/\s*<!--.*?-->\s*/mus', '/\s*<!\[CDATA\[.*?]]>\s*/muis', '/\s*<!DOCTYPE[^>[]*(\[[^]]*])?>\s*/mui'], '', $string);
+            $string = self::trim($string);
             if (\preg_match('/^\s*<p>\s*/ui', $string) === 1) {
                 $preserve_paragraph = true;
             }
             #Check if the string is too long without HTML tags
-            $initial_length = mb_strlen(\strip_tags(\html_entity_decode($string, \ENT_QUOTES | \ENT_SUBSTITUTE | \ENT_HTML5)), 'UTF-8');
+            $initial_length = self::getLength($string);
+            #Early exit
+            if ($initial_length <= $length && $paragraphs === 0) {
+                return $string;
+            }
             #We need to wrap in HTML, due to the behavior of LIBXML_HTML_NOIMPLIED and LibXML, but the string may be already wrapped.
             #If we do not do it, the HTML can get corrupted due to how the library processes the string.
             #More details on https://stackoverflow.com/questions/29493678/
@@ -82,7 +87,7 @@ class Cut
             $html->normalizeDocument();
         } else {
             #We already have a DOMNode
-            $initial_length = mb_strlen(\strip_tags(\html_entity_decode($string->nodeValue ?? $string->textContent, \ENT_QUOTES | \ENT_SUBSTITUTE | \ENT_HTML5)), 'UTF-8');
+            $initial_length = self::getLength($string->nodeValue ?? $string->textContent);
             $html = $string;
         }
         #Set new length
@@ -94,7 +99,7 @@ class Cut
         if ($nodes_count > 0) {
             #Prepare an array for the list of nodes that we are keeping
             $nodes_to_keep = [];
-            #Iterrate children. While theoretically we can use the getElementsByTagName (as is also done further down the code), I was not able to get consistent results with it on this step, often not getting any text whatsoever.
+            #Iterate children. While theoretically we can use the getElementsByTagName (as is also done further down the code), I was not able to get consistent results with it on this step, often not getting any text whatsoever.
             foreach ($html->childNodes as $key => $node) {
                 #Skip HTML comments, CDATA, and DOCTYPE
                 if ($node instanceof \DOMComment || $node instanceof \DOMCdataSection || $node instanceof \DOMNotation) {
@@ -105,7 +110,7 @@ class Cut
                     continue;
                 }
                 #Get length of the current node
-                $node_length_before_cut = mb_strlen(\strip_tags(\html_entity_decode($node->nodeValue ?? $node->textContent, \ENT_QUOTES | \ENT_SUBSTITUTE | \ENT_HTML5)), 'UTF-8');
+                $node_length_before_cut = self::getLength($node->nodeValue ?? $node->textContent);
                 #Check if it fits
                 if ($new_length + $node_length_before_cut <= $length) {
                     #Increase the current length
@@ -126,7 +131,7 @@ class Cut
                         }
                     }
                     #Get length of the updated node
-                    $node_length_after_cut = mb_strlen(\strip_tags(\html_entity_decode($html->childNodes->item($key)->nodeValue, \ENT_QUOTES | \ENT_SUBSTITUTE | \ENT_HTML5)), 'UTF-8');
+                    $node_length_after_cut = self::getLength($html->childNodes->item($key)->nodeValue);
                     if ($new_length + $node_length_after_cut <= $length) {
                         #Update the current length
                         $new_length += $node_length_after_cut;
@@ -140,7 +145,7 @@ class Cut
                 }
             }
             #Remove all excessive nodes from $html. Need to do it separately, sine removal works only if we iterate in reverse
-            #We can safely do this at this point, because we've updated the nodes' values appropriately already. If something was cut - it is already there in the DOM.
+            #We can safely do this at this point, because we've updated the nodes' values appropriately already. If something was cut, it means it is already there in the DOM.
             for ($key = $nodes_count; --$key >= 0;) {
                 if (!in_array($key, $nodes_to_keep, true)) {
                     $node = $html->childNodes->item($key);
@@ -156,9 +161,11 @@ class Cut
             $xpath = new \DOMXPath($html);
             #Remove all tags that do not make sense or have potential to harm in a preview
             if ($strip_unwanted) {
-                $unwanted_tags = $xpath->query(\implode('|', \array_map(static function ($val) {
-                    return '//'.$val;
-                }, self::$extra_tags)));
+                $unwanted_tags = \array_map(static function ($val) {
+                        return '//'.$val;
+                    }, self::$extra_tags)
+                        |> (static fn($x) => \implode('|', $x))
+                        |> (static fn($x) => $xpath->query($x));
                 $unwanted_count = count($unwanted_tags);
                 for ($key = $unwanted_count; --$key >= 0;) {
                     $node = $unwanted_tags[$key];
@@ -168,14 +175,16 @@ class Cut
             #Reduce the number of paragraphs shown
             if ($paragraphs > 0) {
                 #Get the current number of paragraphs. Also counting other elements that generally look as separate paragraphs.
-                $current_paragraphs = $xpath->query(\implode('|', \array_map(static function ($val) {
-                    return '//'.$val;
-                }, self::$paragraph_tags)))->length;
+                $current_paragraphs = \array_map(static function ($val) {
+                        return '//'.$val;
+                    }, self::$paragraph_tags)
+                        |> (static fn($x) => \implode('|', $x))
+                        |> (static fn($x) => $xpath->query($x)->length);
                 #Check if the number of current paragraphs is larger than allowed. Do not do processing if it's not.
                 if ($current_paragraphs > $paragraphs) {
                     #Get all tags
                     $tags = $html->getElementsByTagName('*');
-                    #Iterrate backwards (as per https://www.php.net/manual/en/class.domnodelist.php#83390). Regular iteration seems to provide strange results.
+                    #Iterate backwards (as per https://www.php.net/manual/en/class.domnodelist.php#83390). Regular iteration seems to provide strange results.
                     for ($iterator = $tags->length; --$iterator >= 0;) {
                         #Check if the number of current paragraphs is larger than allowed
                         if ($current_paragraphs > $paragraphs) {
@@ -214,8 +223,7 @@ class Cut
         }
         #Reduce the number of paragraphs shown. While this has been done in terms of pure HTML, there is a chance that we have regular text with regular newlines.
         if ($paragraphs > 0) {
-            #Remove any whitespace between HTML tags, newlines before/after tags and also trim (as a precaution)
-            $string = mb_trim(\preg_replace('/([><])(\R+)/u', '$1', \preg_replace('/(\R+)([><])/u', '$2', \preg_replace('/>\s+</mu', '><', $string))), null, 'UTF-8');
+            $string = self::trim($string);
             #Explode by newlines (treat multiple newlines as one)
             $current_paragraphs = \preg_split('/\R+/u', $string);
             if (count($current_paragraphs) > $paragraphs) {
@@ -223,19 +231,19 @@ class Cut
                 $string = \implode("\r\n", \array_slice($current_paragraphs, 0, $paragraphs));
             }
         }
-        #Remove some common punctuation from the end of the string (if any). These elements, when found ad the end of string, may look out of place. Also, remove any excessive <br> at the beginning and end of the string.
+        #Remove some common punctuation from the end of the string (if any). These elements, when found at the end of a string, may look out of place. Also, remove any excessive <br> at the beginning and end of the string.
         $string = \preg_replace([self::PUNCTUATION, '/(^(<br>)+)|((<br>)+$)/iu'], '', $string);
-        #If we did not have a <p> tag at the beginning of the string and now the new string has it - remove it, since it was added by conversion to HTML. Also remove the closing tag from the end.
+        #If we did not have a <p> tag at the beginning of the string and now the new string has it - remove it, since it was added by conversion to HTML. Also, remove the closing tag from the end.
         if (!$preserve_paragraph && \preg_match('/^\s*<p>\s*/ui', $string) === 1) {
             $string = \preg_replace(['/^\s*<p>\s*/ui', '/\s*<\/p>\s*$/ui'], '', $string);
         }
         #Get current length
-        $current_length = mb_strlen(\strip_tags(\html_entity_decode($string, \ENT_QUOTES | \ENT_SUBSTITUTE | \ENT_HTML5)), 'UTF-8');
+        $current_length = self::getLength($string);
         $string = mb_trim($string, null, 'UTF-8');
         #Return with optional ellipsis
         if ($initial_length && $current_length && $initial_length > $current_length) {
             #Check if we have any closing tags at the end (most likely we do)
-            $closing_tags_string = \preg_replace('/^(.*[^><\/\s]+)((\s*<\s*\/\s*[a-z-A-Z\d\-]+\s*>\s*)+)$/uis', '$2', $string);
+            $closing_tags_string = \preg_replace('/^(.*[^><\/\s]+)((\s*<\s*\/\s*[a-z\-A-Z\d]+\s*>\s*)+)$/uis', '$2', $string);
             #If no closing tags found - add ellipsis to the end of the string
             if (Sanitize::whiteString($closing_tags_string)) {
                 return $string.$ellipsis;
@@ -266,10 +274,37 @@ class Cut
                 return $string.$ellipsis;
             }
             #If found - add ellipsis before the closing tag. `strrev` is used to replace the last occurrence of the closing tag exactly.
-            $closing_tags_new = \strrev(\preg_replace('/(\s*>\s*'.\strrev($last_tag).'\/\s*<)/uis', '$1'.\strrev($ellipsis), \strrev($closing_tags_string), 1));
+            $closing_tags_new = \preg_replace('/(\s*>\s*'.\strrev($last_tag).'\/\s*<)/uis', '$1'.\strrev($ellipsis), \strrev($closing_tags_string), 1) |> (static fn($x) => \strrev($x));
             #Replace tags in the string itself
             return \substr_replace($string, $closing_tags_new, mb_strrpos($string, $closing_tags_string, 0, 'UTF-8'), mb_strlen($closing_tags_string, 'UTF-8'));
         }
         return $string;
+    }
+    
+    /**
+     * Helper function to get the length of the string
+     * @param string $string
+     *
+     * @return int
+     */
+    private static function getLength(string $string): int
+    {
+        return \html_entity_decode($string, \ENT_QUOTES | \ENT_SUBSTITUTE | \ENT_HTML5)
+                |> (static fn($x) => \strip_tags($x))
+                |> (static fn($x) => \mb_strlen($x, 'UTF-8'));
+    }
+    
+    /**
+     * Remove any whitespace between HTML tags, newlines before/after tags and also trim (as a precaution)
+     * @param string $string
+     *
+     * @return string
+     */
+    private static function trim(string $string): string
+    {
+        return \preg_replace('/>\s+</mu', '><', $string)
+                |> (static fn($x) => \preg_replace('/(\R+)([><])/u', '$2', $x))
+                |> (static fn($x) => \preg_replace('/([><])(\R+)/u', '$1', $x))
+                |> (static fn($x) => \mb_trim($x, null, 'UTF-8'));
     }
 }
