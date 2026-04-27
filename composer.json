@@ -24,7 +24,7 @@
     },
     "autoload": {
         "psr-4": {
-            "Simbiat\\HTML\\": "src/"
+            "Simbiat\\HTML\\": ""
         }
     },
     "support": {
