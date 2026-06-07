@@ -208,7 +208,7 @@ class Cut
                 }
             }
             #Update string by saving the object as HTML string, but strip some standard tags added by PHP
-            $new_string = \preg_replace(['/(<!DOCTYPE html PUBLIC "-\/\/W3C\/\/DTD HTML 4\.0 Transitional\/\/EN" "http:\/\/www\.w3\.org\/TR\/REC-html40\/loose\.dtd">\s*<html>\s*<body>\s*)(.*)(<\/body><\/html>)/uis', '/\s+</u', '/>\s+/u'], ['$2', '<', '>'], $html->saveHTML());
+            $new_string = \preg_replace('/(<!DOCTYPE html PUBLIC "-\/\/W3C\/\/DTD HTML 4\.0 Transitional\/\/EN" "http:\/\/www\.w3\.org\/TR\/REC-html40\/loose\.dtd">\s*<html>\s*<body>\s*)(.*)(<\/body><\/html>)/uis', '$2', $html->saveHTML());
         } else {
             return $html;
         }
@@ -249,7 +249,7 @@ class Cut
                 return $string.$ellipsis;
             }
             #Get the tags
-            $closing_tags = \preg_split('/(\s*<\s*\/\s*)|(\s*>\s*)|(\s*>\s*<\s*\/\s*)/', $closing_tags_string, -1, \PREG_SPLIT_NO_EMPTY);
+            $closing_tags = \preg_split('/(\s*<\s*\/\s*)|(\s*>\s*)|(\s*>\s*<\s*\/\s*)/u', $closing_tags_string, -1, \PREG_SPLIT_NO_EMPTY);
             $closing_tags = \array_reverse($closing_tags, true);
             #Iterate from the end of the array to find the last tag that can semantically have some text
             $last_tag = '';
@@ -263,7 +263,7 @@ class Cut
                     'a', 'abbr', 'b', 'bdi', 'bdo', 'cite', 'code', 'data', 'dfn', 'em', 'iterator', 'kbd', 'mark', 'q', 's', 'samp', 'small', 'span', 'strong', 'sub', 'sup', 'time', 'u', 'var',
                     #Other tags that may have some text directly in them
                     'noscript', 'del', 'ins', 'td', 'th', 'caption', 'details', 'dialog',
-                ])) {
+                ], true)) {
                     #Tag found - stop loop
                     $last_tag = $tag;
                     break;
