@@ -55,7 +55,7 @@ class Cut
         }
         $preserve_paragraph = false;
         $wrapped_in_html = false;
-        if (is_string($string)) {
+        if (\is_string($string)) {
             // Remove HTML comments, CDATA and DOCTYPE
             $string = \preg_replace(['/\s*<!--.*?-->\s*/mus', '/\s*<!\[CDATA\[.*?]]>\s*/muis', '/\s*<!DOCTYPE[^>[]*(\[[^]]*])?>\s*/mui'], '', $string);
             $string = self::trim($string);
@@ -82,7 +82,7 @@ class Cut
             $html = new \DOMDocument(encoding: 'UTF-8');
             // `mb_encode_numericentity` is done as per workaround for UTF-8 loss/corruption on loading from https://stackoverflow.com/questions/8218230/php-domdocument-loadhtml-not-encoding-utf-8-correctly
             // LIBXML_HTML_NOIMPLIED and LIBXML_HTML_NOTED to avoid adding wrappers (html, body, DTD). This will also allow fewer issues in case the string has both regular HTML and some regular text (outside any tags). LIBXML_NOBLANKS to remove empty tags if any. LIBXML_PARSEHUGE to allow processing of larger strings. LIBXML_COMPACT for some potential optimization. LIBXML_NOWARNING and LIBXML_NOERROR to suppress warning in case of malformed HTML. LIBXML_NONET to protect from unsolicited connections to external sources.
-            $html->loadHTML(mb_encode_numericentity($string, [0x80, 0x10FFFF, 0, 0x1FFFFF], 'UTF-8'), \LIBXML_HTML_NOIMPLIED | \LIBXML_HTML_NODEFDTD | \LIBXML_NOBLANKS | \LIBXML_PARSEHUGE | \LIBXML_COMPACT | \LIBXML_NOWARNING | \LIBXML_NOERROR | \LIBXML_NONET);
+            $html->loadHTML(\mb_encode_numericentity($string, [0x80, 0x10FFFF, 0, 0x1FFFFF], 'UTF-8'), \LIBXML_HTML_NOIMPLIED | \LIBXML_HTML_NODEFDTD | \LIBXML_NOBLANKS | \LIBXML_PARSEHUGE | \LIBXML_COMPACT | \LIBXML_NOWARNING | \LIBXML_NOERROR | \LIBXML_NONET);
             $html->preserveWhiteSpace = false;
             $html->formatOutput = false;
             $html->normalizeDocument();
@@ -96,7 +96,7 @@ class Cut
         // This if a flag to indicate that we determined that we've cut enough already
         $final_cut = false;
         // Check of node has children
-        $nodes_count = count($html->childNodes);
+        $nodes_count = \count($html->childNodes);
         if ($nodes_count > 0) {
             // Prepare an array for the list of nodes that we are keeping
             $nodes_to_keep = [];
@@ -148,7 +148,7 @@ class Cut
             // Remove all excessive nodes from $html. Need to do it separately, sine removal works only if we iterate in reverse
             // We can safely do this at this point, because we've updated the nodes' values appropriately already. If something was cut, it means it is already there in the DOM.
             for ($key = $nodes_count; --$key >= 0;) {
-                if (!in_array($key, $nodes_to_keep, true)) {
+                if (!\in_array($key, $nodes_to_keep, true)) {
                     $node = $html->childNodes->item($key);
                     $node?->parentNode->removeChild($node);
                 }
@@ -167,7 +167,7 @@ class Cut
                     }, self::$extra_tags)
                         |> (static fn($x) => \implode('|', $x))
                         |> (static fn($x) => $xpath->query($x));
-                $unwanted_count = count($unwanted_tags);
+                $unwanted_count = \count($unwanted_tags);
                 for ($key = $unwanted_count; --$key >= 0;) {
                     $node = $unwanted_tags[$key];
                     $node->parentNode->removeChild($node);
@@ -191,7 +191,7 @@ class Cut
                         if ($current_paragraphs > $paragraphs) {
                             // Get actual node
                             $node = $tags->item($iterator);
-                            if (in_array(mb_strtolower($node->nodeName, 'UTF-8'), self::$paragraph_tags, true)) {
+                            if (\in_array(\mb_strtolower($node->nodeName, 'UTF-8'), self::$paragraph_tags, true)) {
                                 $current_paragraphs--;
                             }
                             // Remove node
@@ -202,7 +202,7 @@ class Cut
             }
             // Remove all empty nodes (taken from https://stackoverflow.com/questions/40367047/remove-all-empty-html-elements-using-php-domdocument). Using `while` allows for recursion
             while (($node_list = $xpath->query('//*[not(*) and not(@*) and not(text()[string-length(normalize-space()) > 0])]')) && $node_list->length) {
-                $empty_count = count($node_list);
+                $empty_count = \count($node_list);
                 for ($key = $empty_count; --$key >= 0;) {
                     $node = $node_list[$key];
                     $node->parentNode->removeChild($node);
@@ -214,7 +214,7 @@ class Cut
             return $html;
         }
         // Check if the string got updated
-        if (is_string($new_string)) {
+        if (\is_string($new_string)) {
             $string = $new_string;
             $new_string = null;
         }
@@ -227,7 +227,7 @@ class Cut
             $string = self::trim($string);
             // Explode by newlines (treat multiple newlines as one)
             $current_paragraphs = \preg_split('/\R+/u', $string);
-            if (count($current_paragraphs) > $paragraphs) {
+            if (\count($current_paragraphs) > $paragraphs) {
                 // Slice and then implode back
                 $string = \implode("\r\n", \array_slice($current_paragraphs, 0, $paragraphs));
             }
@@ -240,7 +240,7 @@ class Cut
         }
         // Get current length
         $current_length = self::getLength($string);
-        $string = mb_trim($string, null, 'UTF-8');
+        $string = \mb_trim($string, null, 'UTF-8');
         // Return with optional ellipsis
         if ($initial_length && $current_length && $initial_length > $current_length) {
             // Check if we have any closing tags at the end (most likely we do)
@@ -255,7 +255,7 @@ class Cut
             // Iterate from the end of the array to find the last tag that can semantically have some text
             $last_tag = '';
             foreach ($closing_tags as $tag) {
-                if (in_array(mb_strtolower($tag, 'UTF-8'), [
+                if (\in_array(\mb_strtolower($tag, 'UTF-8'), [
                     // Content sectioning tags, which still can have some text directly inside
                     'address', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'article', 'section', 'aside',
                     // Text blocks that can have some text directly inside them. UL and OL, for example, can have it only in child `li` elements; thus they do not fit.
@@ -277,7 +277,7 @@ class Cut
             // If found - add ellipsis before the closing tag. `strrev` is used to replace the last occurrence of the closing tag exactly.
             $closing_tags_new = \preg_replace('/(\s*>\s*'.\strrev($last_tag).'\/\s*<)/uis', '$1'.\strrev($ellipsis), \strrev($closing_tags_string), 1) |> (static fn($x) => \strrev($x));
             // Replace tags in the string itself
-            return \substr_replace($string, $closing_tags_new, mb_strrpos($string, $closing_tags_string, 0, 'UTF-8'), mb_strlen($closing_tags_string, 'UTF-8'));
+            return \substr_replace($string, $closing_tags_new, \mb_strrpos($string, $closing_tags_string, 0, 'UTF-8'), \mb_strlen($closing_tags_string, 'UTF-8'));
         }
         return $string;
     }
