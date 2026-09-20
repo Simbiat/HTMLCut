@@ -14,6 +14,7 @@ class Cut
 {
     /**
      * Tags that we consider irrelevant or harmful for preview
+     *
      * @var array|string[]
      */
     public static array $extra_tags = [
@@ -21,6 +22,7 @@ class Cut
     ];
     /**
      * Tags that we consider paragraphs
+     *
      * @var array|string[]
      */
     public static array $paragraph_tags = [
@@ -28,6 +30,7 @@ class Cut
     ];
     /**
      * Regex to remove punctuation symbols from the end of the string, that may make no sense there
+     *
      * @var string
      */
     public const string PUNCTUATION = '/([:;,\[(\-{<_„“‘«「﹁‹『﹃《〈]+|\.{2,})$/u';
@@ -65,7 +68,10 @@ class Cut
             // Check if the string is too long without HTML tags
             $initial_length = self::getLength($string);
             // Early exit
-            if ($initial_length <= $length && $paragraphs === 0) {
+            if (
+                $initial_length <= $length
+                && $paragraphs === 0
+            ) {
                 return $string;
             }
             // We need to wrap in HTML, due to the behavior of LIBXML_HTML_NOIMPLIED and LibXML, but the string may be already wrapped.
@@ -103,7 +109,11 @@ class Cut
             // Iterate children. While theoretically we can use the getElementsByTagName (as is also done further down the code), I was not able to get consistent results with it on this step, often not getting any text whatsoever.
             foreach ($html->childNodes as $key => $node) {
                 // Skip HTML comments, CDATA, and DOCTYPE
-                if ($node instanceof \DOMComment || $node instanceof \DOMCdataSection || $node instanceof \DOMNotation) {
+                if (
+                    $node instanceof \DOMComment
+                    || $node instanceof \DOMCdataSection
+                    || $node instanceof \DOMNotation
+                ) {
                     continue;
                 }
                 // Skip the node if we determined that the final cut was done on a previous iteration
@@ -123,11 +133,14 @@ class Cut
                     // Check if DOMText
                     if ($node instanceof \DOMText) {
                         // Cut directly in the DOM. Regex allows retaining whole words.
-                        $html->childNodes->item($key)->nodeValue = \preg_replace('/^(((&(?:[a-z\d]+|#\d+|#x[a-f\d]+);)|.){'.(($length - $new_length) > 0 ? '1,'.($length - $new_length) : '0,0').'}\b)(.*)/siu', '$1', $html->childNodes->item($key)->nodeValue);
+                        $html->childNodes->item($key)->nodeValue = \preg_replace('/^(((&(?:[a-z\d]+|#\d+|#x[a-f\d]+);)|.){'.($length - $new_length > 0 ? '1,'.($length - $new_length) : '0,0').'}\b)(.*)/siu', '$1', $html->childNodes->item($key)->nodeValue);
                     } else {
                         // Recurse and replace the current node with the new (possibly cut) node
                         $new_node = self::cut($node, $length - $new_length);
-                        if ($new_node->nodeValue !== null && $new_node->nodeValue !== '') {
+                        if (
+                            $new_node->nodeValue !== null
+                            && $new_node->nodeValue !== ''
+                        ) {
                             $html->replaceChild($new_node, $node);
                         }
                     }
@@ -155,7 +168,7 @@ class Cut
             }
         } elseif ($html instanceof \DOMText) {
             // Cut directly in the DOM. Regex allows retaining whole words. We also trim the text inside the nodes
-            $html->nodeValue = \preg_replace(['/^(((&(?:[a-z\d]+|#\d+|#x[a-f\d]+);)|.){'.(($length - $new_length) > 0 ? '1,'.($length - $new_length) : '0,0').'}\b)(.*)/siu', '/\s+</u', '/>\s+/u'], ['$1', '<', '>'], $html->nodeValue);
+            $html->nodeValue = \preg_replace(['/^(((&(?:[a-z\d]+|#\d+|#x[a-f\d]+);)|.){'.($length - $new_length > 0 ? '1,'.($length - $new_length) : '0,0').'}\b)(.*)/siu', '/\s+</u', '/>\s+/u'], ['$1', '<', '>'], $html->nodeValue);
         }
         if ($html instanceof \DOMDocument) {
             // Set xpath variable
@@ -201,7 +214,10 @@ class Cut
                 }
             }
             // Remove all empty nodes (taken from https://stackoverflow.com/questions/40367047/remove-all-empty-html-elements-using-php-domdocument). Using `while` allows for recursion
-            while (($node_list = $xpath->query('//*[not(*) and not(@*) and not(text()[string-length(normalize-space()) > 0])]')) && $node_list->length) {
+            while (
+                ($node_list = $xpath->query('//*[not(*) and not(@*) and not(text()[string-length(normalize-space()) > 0])]'))
+                && $node_list->length
+            ) {
                 $empty_count = \count($node_list);
                 for ($key = $empty_count; --$key >= 0;) {
                     $node = $node_list[$key];
@@ -235,14 +251,21 @@ class Cut
         // Remove some common punctuation from the end of the string (if any). These elements, when found at the end of a string, may look out of place. Also, remove any excessive <br> at the beginning and end of the string.
         $string = \preg_replace([self::PUNCTUATION, '/(^(<br>)+)|((<br>)+$)/iu'], '', $string);
         // If we did not have a <p> tag at the beginning of the string and now the new string has it - remove it, since it was added by conversion to HTML. Also, remove the closing tag from the end.
-        if (!$preserve_paragraph && \preg_match('/^\s*<p>\s*/ui', $string) === 1) {
+        if (
+            !$preserve_paragraph
+            && \preg_match('/^\s*<p>\s*/ui', $string) === 1
+        ) {
             $string = \preg_replace(['/^\s*<p>\s*/ui', '/\s*<\/p>\s*$/ui'], '', $string);
         }
         // Get current length
         $current_length = self::getLength($string);
         $string = \mb_trim($string, null, 'UTF-8');
         // Return with optional ellipsis
-        if ($initial_length && $current_length && $initial_length > $current_length) {
+        if (
+            $initial_length
+            && $current_length
+            && $initial_length > $current_length
+        ) {
             // Check if we have any closing tags at the end (most likely we do)
             $closing_tags_string = \preg_replace('/^(.*[^><\/\s]+)((\s*<\s*\/\s*[a-z\-A-Z\d]+\s*>\s*)+)$/uis', '$2', $string);
             // If no closing tags found - add ellipsis to the end of the string
@@ -267,6 +290,7 @@ class Cut
                 ], true)) {
                     // Tag found - stop loop
                     $last_tag = $tag;
+
                     break;
                 }
             }
@@ -276,14 +300,17 @@ class Cut
             }
             // If found - add ellipsis before the closing tag. `strrev` is used to replace the last occurrence of the closing tag exactly.
             $closing_tags_new = \preg_replace('/(\s*>\s*'.\strrev($last_tag).'\/\s*<)/uis', '$1'.\strrev($ellipsis), \strrev($closing_tags_string), 1) |> (static fn($x) => \strrev($x));
+
             // Replace tags in the string itself
             return \substr_replace($string, $closing_tags_new, \mb_strrpos($string, $closing_tags_string, 0, 'UTF-8'), \mb_strlen($closing_tags_string, 'UTF-8'));
         }
+
         return $string;
     }
 
     /**
      * Helper function to get the length of the string
+     *
      * @param string $string
      *
      * @return int
@@ -297,6 +324,7 @@ class Cut
 
     /**
      * Remove any whitespace between HTML tags, newlines before/after tags and also trim (as a precaution)
+     *
      * @param string $string
      *
      * @return string
