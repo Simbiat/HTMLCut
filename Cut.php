@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Simbiat\HTML;
 
 use Simbiat\StringHelpers\Sanitize;
-use function count, is_string, in_array;
 
 /**
  * This is a class to cut HTML while preserving (to an extent) HTML structure.
@@ -20,6 +19,7 @@ class Cut
     public static array $extra_tags = [
         'applet', 'area', 'audio', 'base', 'blockquote', 'button', 'canvas', 'code', 'col', 'data', 'datalist', 'details', 'dialog', 'dir', 'embed', 'fieldset', 'figcapture', 'figure', 'font', 'footer', 'form', 'frame', 'frameset', 'header', 'iframe', 'img', 'input', 'ins', 'kbd', 'legend', 'link', 'main', 'map', 'meta', 'nav', 'noframes', 'noscript', 'object', 'optgroup', 'option', 'output', 'picture', 'pre', 'progress', 'q', 'rp', 'rt', 'ruby', 'samp', 'script', 'select', 'source', 'style', 'summary', 'svg', 'table', 'tbody', 'td', 'template', 'textarea', 'tfoot', 'th', 'thead', 'title', 'tr', 'track', 'tt', 'var', 'video',
     ];
+
     /**
      * Tags that we consider paragraphs
      *
@@ -31,7 +31,6 @@ class Cut
     /**
      * Regex to remove punctuation symbols from the end of the string, that may make no sense there
      *
-     * @var string
      */
     public const string PUNCTUATION = '/([:;,\[(\-{<_„“‘«「﹁‹『﹃《〈]+|\.{2,})$/u';
 
@@ -278,7 +277,8 @@ class Cut
             // Iterate from the end of the array to find the last tag that can semantically have some text
             $last_tag = '';
             foreach ($closing_tags as $tag) {
-                if (\in_array(\mb_strtolower($tag, 'UTF-8'), [
+                if (
+                    \in_array(\mb_strtolower($tag, 'UTF-8'), [
                     // Content sectioning tags, which still can have some text directly inside
                     'address', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'article', 'section', 'aside',
                     // Text blocks that can have some text directly inside them. UL and OL, for example, can have it only in child `li` elements; thus they do not fit.
@@ -287,7 +287,8 @@ class Cut
                     'a', 'abbr', 'b', 'bdi', 'bdo', 'cite', 'code', 'data', 'dfn', 'em', 'iterator', 'kbd', 'mark', 'q', 's', 'samp', 'small', 'span', 'strong', 'sub', 'sup', 'time', 'u', 'var',
                     // Other tags that may have some text directly in them
                     'noscript', 'del', 'ins', 'td', 'th', 'caption', 'details', 'dialog',
-                ], true)) {
+                    ], true)
+                ) {
                     // Tag found - stop loop
                     $last_tag = $tag;
 
