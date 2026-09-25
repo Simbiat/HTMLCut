@@ -9,7 +9,7 @@ use Simbiat\StringHelpers\Sanitize;
 /**
  * This is a class to cut HTML while preserving (to an extent) HTML structure.
  */
-class Cut
+final class Cut
 {
     /**
      * Tags that we consider irrelevant or harmful for preview
@@ -169,65 +169,65 @@ class Cut
             // Cut directly in the DOM. Regex allows retaining whole words. We also trim the text inside the nodes
             $html->nodeValue = \preg_replace(['/^(((&(?:[a-z\d]+|#\d+|#x[a-f\d]+);)|.){'.($length - $new_length > 0 ? '1,'.($length - $new_length) : '0,0').'}\b)(.*)/siu', '/\s+</u', '/>\s+/u'], ['$1', '<', '>'], $html->nodeValue);
         }
-        if ($html instanceof \DOMDocument) {
-            // Set xpath variable
-            $xpath = new \DOMXPath($html);
-            // Remove all tags that do not make sense or have potential to harm in a preview
-            if ($strip_unwanted) {
-                $unwanted_tags = \array_map(static function ($val) {
-                        return '//'.$val;
-                    }, self::$extra_tags)
-                        |> (static fn($x) => \implode('|', $x))
-                        |> (static fn($x) => $xpath->query($x));
-                $unwanted_count = \count($unwanted_tags);
-                for ($key = $unwanted_count; --$key >= 0;) {
-                    $node = $unwanted_tags[$key];
-                    $node->parentNode->removeChild($node);
-                }
+        if (!($html instanceof \DOMDocument)) {
+            return $html;
+        }
+
+        // Set xpath variable
+        $xpath = new \DOMXPath($html);
+        // Remove all tags that do not make sense or have potential to harm in a preview
+        if ($strip_unwanted) {
+            $unwanted_tags = \array_map(static function ($val) {
+                    return '//'.$val;
+                }, self::$extra_tags)
+                    |> (static fn($x) => \implode('|', $x))
+                    |> (static fn($x) => $xpath->query($x));
+            $unwanted_count = \count($unwanted_tags);
+            for ($key = $unwanted_count; --$key >= 0;) {
+                $node = $unwanted_tags[$key];
+                $node->parentNode->removeChild($node);
             }
-            // Reduce the number of paragraphs shown
-            if ($paragraphs > 0) {
-                // Get the current number of paragraphs. Also counting other elements that generally look as separate paragraphs.
-                $current_paragraphs = \array_map(static function ($val) {
-                        return '//'.$val;
-                    }, self::$paragraph_tags)
-                        |> (static fn($x) => \implode('|', $x))
-                        |> (static fn($x) => $xpath->query($x)->length);
-                // Check if the number of current paragraphs is larger than allowed. Do not do processing if it's not.
-                if ($current_paragraphs > $paragraphs) {
-                    // Get all tags
-                    $tags = $html->getElementsByTagName('*');
-                    // Iterate backwards (as per https://www.php.net/manual/en/class.domnodelist.php#83390). Regular iteration seems to provide strange results.
-                    for ($iterator = $tags->length; --$iterator >= 0;) {
-                        // Check if the number of current paragraphs is larger than allowed
-                        if ($current_paragraphs > $paragraphs) {
-                            // Get actual node
-                            $node = $tags->item($iterator);
-                            if (\in_array(\mb_strtolower($node->nodeName, 'UTF-8'), self::$paragraph_tags, true)) {
-                                $current_paragraphs--;
-                            }
-                            // Remove node
-                            $node->parentNode->removeChild($node);
+        }
+        // Reduce the number of paragraphs shown
+        if ($paragraphs > 0) {
+            // Get the current number of paragraphs. Also counting other elements that generally look as separate paragraphs.
+            $current_paragraphs = \array_map(static function ($val) {
+                    return '//'.$val;
+                }, self::$paragraph_tags)
+                    |> (static fn($x) => \implode('|', $x))
+                    |> (static fn($x) => $xpath->query($x)->length);
+            // Check if the number of current paragraphs is larger than allowed. Do not do processing if it's not.
+            if ($current_paragraphs > $paragraphs) {
+                // Get all tags
+                $tags = $html->getElementsByTagName('*');
+                // Iterate backwards (as per https://www.php.net/manual/en/class.domnodelist.php#83390). Regular iteration seems to provide strange results.
+                for ($iterator = $tags->length; --$iterator >= 0;) {
+                    // Check if the number of current paragraphs is larger than allowed
+                    if ($current_paragraphs > $paragraphs) {
+                        // Get actual node
+                        $node = $tags->item($iterator);
+                        if (\in_array(\mb_strtolower($node->nodeName, 'UTF-8'), self::$paragraph_tags, true)) {
+                            $current_paragraphs--;
                         }
+                        // Remove node
+                        $node->parentNode->removeChild($node);
                     }
                 }
             }
-            // Remove all empty nodes (taken from https://stackoverflow.com/questions/40367047/remove-all-empty-html-elements-using-php-domdocument). Using `while` allows for recursion
-            while (
-                ($node_list = $xpath->query('//*[not(*) and not(@*) and not(text()[string-length(normalize-space()) > 0])]'))
-                && $node_list->length
-            ) {
-                $empty_count = \count($node_list);
-                for ($key = $empty_count; --$key >= 0;) {
-                    $node = $node_list[$key];
-                    $node->parentNode->removeChild($node);
-                }
-            }
-            // Update string by saving the object as HTML string, but strip some standard tags added by PHP
-            $new_string = \preg_replace('/(<!DOCTYPE html PUBLIC "-\/\/W3C\/\/DTD HTML 4\.0 Transitional\/\/EN" "http:\/\/www\.w3\.org\/TR\/REC-html40\/loose\.dtd">\s*<html>\s*<body>\s*)(.*)(<\/body><\/html>)/uis', '$2', $html->saveHTML());
-        } else {
-            return $html;
         }
+        // Remove all empty nodes (taken from https://stackoverflow.com/questions/40367047/remove-all-empty-html-elements-using-php-domdocument). Using `while` allows for recursion
+        while (
+            ($node_list = $xpath->query('//*[not(*) and not(@*) and not(text()[string-length(normalize-space()) > 0])]'))
+            && $node_list->length
+        ) {
+            $empty_count = \count($node_list);
+            for ($key = $empty_count; --$key >= 0;) {
+                $node = $node_list[$key];
+                $node->parentNode->removeChild($node);
+            }
+        }
+        // Update string by saving the object as HTML string, but strip some standard tags added by PHP
+        $new_string = \preg_replace('/(<!DOCTYPE html PUBLIC "-\/\/W3C\/\/DTD HTML 4\.0 Transitional\/\/EN" "http:\/\/www\.w3\.org\/TR\/REC-html40\/loose\.dtd">\s*<html>\s*<body>\s*)(.*)(<\/body><\/html>)/uis', '$2', $html->saveHTML());
         // Check if the string got updated
         if (\is_string($new_string)) {
             $string = $new_string;
