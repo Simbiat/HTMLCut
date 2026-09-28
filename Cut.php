@@ -12,9 +12,14 @@ use Simbiat\StringHelpers\Sanitize;
 final class Cut
 {
     /**
+     * Regex to remove punctuation symbols from the end of the string, that may make no sense there
+     */
+    public const string PUNCTUATION = '/([:;,\[(\-{<_„“‘«「﹁‹『﹃《〈]+|\.{2,})$/u';
+
+    /**
      * Tags that we consider irrelevant or harmful for preview
      *
-     * @var array|string[]
+     * @var array<string>
      */
     public static array $extra_tags = [
         'applet', 'area', 'audio', 'base', 'blockquote', 'button', 'canvas', 'code', 'col', 'data', 'datalist', 'details', 'dialog', 'dir', 'embed', 'fieldset', 'figcapture', 'figure', 'font', 'footer', 'form', 'frame', 'frameset', 'header', 'iframe', 'img', 'input', 'ins', 'kbd', 'legend', 'link', 'main', 'map', 'meta', 'nav', 'noframes', 'noscript', 'object', 'optgroup', 'option', 'output', 'picture', 'pre', 'progress', 'q', 'rp', 'rt', 'ruby', 'samp', 'script', 'select', 'source', 'style', 'summary', 'svg', 'table', 'tbody', 'td', 'template', 'textarea', 'tfoot', 'th', 'thead', 'title', 'tr', 'track', 'tt', 'var', 'video',
@@ -23,16 +28,11 @@ final class Cut
     /**
      * Tags that we consider paragraphs
      *
-     * @var array|string[]
+     * @var array<string>
      */
     public static array $paragraph_tags = [
         'article', 'aside', 'div', 'li', 'p', 'section',
     ];
-    /**
-     * Regex to remove punctuation symbols from the end of the string, that may make no sense there
-     *
-     */
-    public const string PUNCTUATION = '/([:;,\[(\-{<_„“‘«「﹁‹『﹃《〈]+|\.{2,})$/u';
 
     /**
      * Cut HTML to the selected length
@@ -87,7 +87,19 @@ final class Cut
             $html = new \DOMDocument(encoding: 'UTF-8');
             // `mb_encode_numericentity` is done as per workaround for UTF-8 loss/corruption on loading from https://stackoverflow.com/questions/8218230/php-domdocument-loadhtml-not-encoding-utf-8-correctly
             // LIBXML_HTML_NOIMPLIED and LIBXML_HTML_NOTED to avoid adding wrappers (html, body, DTD). This will also allow fewer issues in case the string has both regular HTML and some regular text (outside any tags). LIBXML_NOBLANKS to remove empty tags if any. LIBXML_PARSEHUGE to allow processing of larger strings. LIBXML_COMPACT for some potential optimization. LIBXML_NOWARNING and LIBXML_NOERROR to suppress warning in case of malformed HTML. LIBXML_NONET to protect from unsolicited connections to external sources.
-            $html->loadHTML(\mb_encode_numericentity($string, [0x80, 0x10FFFF, 0, 0x1FFFFF], 'UTF-8'), \LIBXML_HTML_NOIMPLIED | \LIBXML_HTML_NODEFDTD | \LIBXML_NOBLANKS | \LIBXML_PARSEHUGE | \LIBXML_COMPACT | \LIBXML_NOWARNING | \LIBXML_NOERROR | \LIBXML_NONET);
+            $html->loadHTML(
+                \mb_encode_numericentity(
+                    $string,
+                    [
+                        0x80,
+                        0x10FFFF,
+                        0,
+                        0x1FFFFF,
+                    ],
+                    'UTF-8',
+                ),
+                \LIBXML_HTML_NOIMPLIED | \LIBXML_HTML_NODEFDTD | \LIBXML_NOBLANKS | \LIBXML_PARSEHUGE | \LIBXML_COMPACT | \LIBXML_NOWARNING | \LIBXML_NOERROR | \LIBXML_NONET,
+            );
             $html->preserveWhiteSpace = false;
             $html->formatOutput = false;
             $html->normalizeDocument();
@@ -177,9 +189,7 @@ final class Cut
         $xpath = new \DOMXPath($html);
         // Remove all tags that do not make sense or have potential to harm in a preview
         if ($strip_unwanted) {
-            $unwanted_tags = \array_map(static function ($val) {
-                    return '//'.$val;
-                }, self::$extra_tags)
+            $unwanted_tags = \array_map(static fn($val) => '//'.$val, self::$extra_tags)
                     |> (static fn($x) => \implode('|', $x))
                     |> (static fn($x) => $xpath->query($x));
             $unwanted_count = \count($unwanted_tags);
@@ -191,9 +201,7 @@ final class Cut
         // Reduce the number of paragraphs shown
         if ($paragraphs > 0) {
             // Get the current number of paragraphs. Also counting other elements that generally look as separate paragraphs.
-            $current_paragraphs = \array_map(static function ($val) {
-                    return '//'.$val;
-                }, self::$paragraph_tags)
+            $current_paragraphs = \array_map(static fn($val) => '//'.$val, self::$paragraph_tags)
                     |> (static fn($x) => \implode('|', $x))
                     |> (static fn($x) => $xpath->query($x)->length);
             // Check if the number of current paragraphs is larger than allowed. Do not do processing if it's not.
@@ -207,7 +215,7 @@ final class Cut
                         // Get actual node
                         $node = $tags->item($iterator);
                         if (\in_array(\mb_strtolower($node->nodeName, 'UTF-8'), self::$paragraph_tags, true)) {
-                            $current_paragraphs--;
+                            --$current_paragraphs;
                         }
                         // Remove node
                         $node->parentNode->removeChild($node);
@@ -278,16 +286,20 @@ final class Cut
             $last_tag = '';
             foreach ($closing_tags as $tag) {
                 if (
-                    \in_array(\mb_strtolower($tag, 'UTF-8'), [
-                    // Content sectioning tags, which still can have some text directly inside
-                    'address', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'article', 'section', 'aside',
-                    // Text blocks that can have some text directly inside them. UL and OL, for example, can have it only in child `li` elements; thus they do not fit.
-                    'blockquote', 'dd', 'div', 'dl', 'dt', 'figcaption', 'li', 'p', 'pre',
-                    // Inline elements
-                    'a', 'abbr', 'b', 'bdi', 'bdo', 'cite', 'code', 'data', 'dfn', 'em', 'iterator', 'kbd', 'mark', 'q', 's', 'samp', 'small', 'span', 'strong', 'sub', 'sup', 'time', 'u', 'var',
-                    // Other tags that may have some text directly in them
-                    'noscript', 'del', 'ins', 'td', 'th', 'caption', 'details', 'dialog',
-                    ], true)
+                    \in_array(
+                        \mb_strtolower($tag, 'UTF-8'),
+                        [
+                            // Content sectioning tags, which still can have some text directly inside
+                            'address', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'article', 'section', 'aside',
+                            // Text blocks that can have some text directly inside them. UL and OL, for example, can have it only in child `li` elements; thus they do not fit.
+                            'blockquote', 'dd', 'div', 'dl', 'dt', 'figcaption', 'li', 'p', 'pre',
+                            // Inline elements
+                            'a', 'abbr', 'b', 'bdi', 'bdo', 'cite', 'code', 'data', 'dfn', 'em', 'iterator', 'kbd', 'mark', 'q', 's', 'samp', 'small', 'span', 'strong', 'sub', 'sup', 'time', 'u', 'var',
+                            // Other tags that may have some text directly in them
+                            'noscript', 'del', 'ins', 'td', 'th', 'caption', 'details', 'dialog',
+                        ],
+                        true,
+                    )
                 ) {
                     // Tag found - stop loop
                     $last_tag = $tag;
