@@ -12,12 +12,12 @@ use Simbiat\StringHelpers\Sanitize;
 final class Cut
 {
     /**
-     * Regex to remove punctuation symbols from the end of the string, that may make no sense there
+     * Regex to remove punctuation symbols from the end of the string, that may make no sense there.
      */
     public const string PUNCTUATION = '/([:;,\[(\-{<_„“‘«「﹁‹『﹃《〈]+|\.{2,})$/u';
 
     /**
-     * Tags that we consider irrelevant or harmful for preview
+     * Tags that we consider irrelevant or harmful for preview.
      *
      * @var array<string>
      */
@@ -26,7 +26,7 @@ final class Cut
     ];
 
     /**
-     * Tags that we consider paragraphs
+     * Tags that we consider paragraphs.
      *
      * @var array<string>
      */
@@ -35,7 +35,7 @@ final class Cut
     ];
 
     /**
-     * Cut HTML to the selected length
+     * Cut HTML to the selected length.
      *
      * @param \DOMNode|string $string         String or DOMNode to process.
      * @param int             $length         Maximum length of the resulting string.
@@ -322,7 +322,7 @@ final class Cut
     }
 
     /**
-     * Helper function to get the length of the string
+     * Helper function to get the length of the string.
      *
      * @param string $string
      *
@@ -336,7 +336,7 @@ final class Cut
     }
 
     /**
-     * Remove any whitespace between HTML tags, newlines before/after tags and also trim (as a precaution)
+     * Remove any whitespace between HTML tags, newlines before/after tags and also trim (as a precaution).
      *
      * @param string $string
      *
