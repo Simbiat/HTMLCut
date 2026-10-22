@@ -83,8 +83,7 @@ final class Cut
             if (\preg_match('/^\s*<html( [^<>]*)?>.*<\/html>\s*$/uis', $string) === 1) {
                 $wrapped_in_html = true;
             } else {
-                // Suppressing inspection, since we don't need the language for the library
-                /** @noinspection HtmlRequiredLangAttribute */
+                /** @noinspection HtmlRequiredLangAttribute -- Suppressing inspection, since we don't need the language for the library*/
                 $string = '<html>'.$string.'</html>';
             }
 
